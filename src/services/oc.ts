@@ -1,23 +1,13 @@
-import {
-  createOpencode,
-  type OpencodeClient,
-  type Event,
-} from "@opencode-ai/sdk";
+import { createOpencode, type Event } from "@opencode-ai/sdk";
 import { Deferred, Effect, Stream } from "effect";
-import { TaggedError } from "effect/Data";
 import { ConfigService } from "./config.ts";
-
-class OcError extends TaggedError("OcError")<{
-  readonly message: string;
-  readonly cause?: unknown;
-}> {}
+import { OcError } from "../lib/errors.ts";
 
 export type { Event as OcEvent };
 
 const ocService = Effect.gen(function* () {
   const config = yield* ConfigService;
-  const agentPromptPath = yield* config.getDocsAgentPromptPath();
-  const configObject = yield* config.getOpenCodeConfig({ agentPromptPath });
+  const configObject = yield* config.getOpenCodeConfig();
 
   const { client, server } = yield* Effect.tryPromise({
     try: () =>
@@ -125,8 +115,14 @@ const ocService = Effect.gen(function* () {
     });
 
   return {
-    testPrompting: (prompt: string) =>
+    askQuestion: (args: { question: string; tech: string }) =>
       Effect.gen(function* () {
+        const { question, tech } = args;
+
+        const repo = yield* config.cloneOrUpdateOneRepoLocally(tech);
+
+        yield* config.loadDocsAgentPrompt({ repos: [repo] });
+
         const session = yield* Effect.promise(() => client.session.create());
 
         if (session.error) {
@@ -141,7 +137,7 @@ const ocService = Effect.gen(function* () {
         const sessionID = session.data.id;
         yield* Effect.log(`PROMPTING WITH: ${prompt}`);
 
-        return yield* streamPrompt({ sessionID, prompt });
+        return yield* streamPrompt({ sessionID, prompt: question });
       }),
   };
 });

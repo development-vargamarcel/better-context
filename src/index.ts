@@ -1,9 +1,8 @@
 import { BunRuntime } from "@effect/platform-bun";
 import { Effect, Layer, Stream } from "effect";
 import { OcService, type OcEvent } from "./services/oc.ts";
-import { ContextService } from "./services/context.ts";
 
-const programLayer = Layer.mergeAll(OcService.Default, ContextService.Default);
+const programLayer = Layer.mergeAll(OcService.Default);
 
 const logEvent = (event: OcEvent) => {
   if (event.type === "message.part.updated") {
@@ -25,14 +24,12 @@ const logEvent = (event: OcEvent) => {
 const program = Effect.gen(function* () {
   yield* Effect.log("STARTING UP...");
 
-  const context = yield* ContextService;
   const oc = yield* OcService;
 
-  yield* context.cloneOrUpdateAllReposLocally();
-
-  const eventStream = yield* oc.testPrompting(
-    "How does effect.tap work? When would I want to use it?"
-  );
+  const eventStream = yield* oc.askQuestion({
+    tech: "effect",
+    question: "How does effect.tap work? When would I want to use it?",
+  });
 
   yield* eventStream.pipe(
     Stream.runForEach((event) => Effect.sync(() => logEvent(event)))

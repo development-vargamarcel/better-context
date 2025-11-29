@@ -1,147 +1,88 @@
 import type { Config } from "@opencode-ai/sdk";
 import { Effect } from "effect";
-import { TaggedError } from "effect/Data";
 import { mkdir } from "node:fs/promises";
 import * as path from "node:path";
 import {
-  CONFIG_DIRECTORY,
   PROMPTS_DIRECTORY,
   REPOS_DIRECTORY,
   DOCS_PROMPT_FILENAME,
-  expandHome,
-} from "../lib/utils.ts";
-
-class ConfigError extends TaggedError("ConfigError")<{
-  readonly message: string;
-  readonly cause?: unknown;
-}> {}
-
-export type Repo = {
-  name: string;
-  url: string;
-  branch?: string;
-};
-
-const repos = {
-  effect: {
-    name: "effect",
-    url: "https://github.com/Effect-TS/effect",
-    branch: "main",
-  },
-  opencode: {
-    name: "opencode",
-    url: "https://github.com/sst/opencode",
-    branch: "production",
-  },
-  svelte: {
-    name: "svelte",
-    url: "https://github.com/sveltejs/svelte.dev",
-    branch: "main",
-  },
-  daytona: {
-    name: "daytona",
-    url: "https://github.com/daytonaio/daytona",
-    branch: "main",
-  },
-  neverthrow: {
-    name: "neverthrow",
-    url: "https://github.com/supermacro/neverthrow",
-    branch: "master",
-  },
-} satisfies Record<string, Repo>;
-
-export type RepoName = keyof typeof repos;
-
-export const DOCS_AGENT_PROMPT = (args: {
-  repos: Repo[];
-  reposDirectory: string;
-}) => `
-You are an expert internal agent who's job is to answer coding questions and provide accurate and up to date info on different technologies, libraries, frameworks, or tools you're using based on the library codebases you have access to.
-
-Currently you have access to the following codebases:
-
-${args.repos.map((repo) => `- ${repo.name}\n`)}
-
-They are located at the following path:
-
-${args.reposDirectory}
-
-When asked a question regarding the codebase, search the codebase to get an accurate answer.
-
-Always search the codebase first before using the web to try to answer the question.
-
-When you are searching the codebase, be very careful that you do not read too much at once. Only read a small amount at a time as you're searching, avoid reading dozens of files at once...
-
-When responding:
-
-- If something about the question is not clear, ask the user to provide more information
-- Really try to keep your responses concise, you don't need tons of examples, just one really good one
-- Be extremely concise. Sacrifice grammar for the sake of concision.
-- When outputting code snippets, include comments that explain what each piece does
-- Always bias towards simple practical examples over complex theoretical explanations
-- Give your response in markdown format, make sure to have spacing between code blocks and other content
-`;
+} from "../lib/temp-constants.ts";
+import { defaultRepos } from "../lib/defaults.ts";
+import { getDocsAgentPrompt } from "../lib/prompts.ts";
+import type { Repo } from "../lib/types.ts";
+import { ConfigError } from "../lib/errors.ts";
+import { cloneRepo, pullRepo } from "../lib/utils/git.ts";
+import { directoryExists, expandHome } from "../lib/utils/files.ts";
 
 // NOTE: this is a service because it's also gonna contain user config stuff for better context (where the config file lives, where the repos are cloned to, etc.)
 
 const configService = Effect.gen(function* () {
-  const ensureDocsAgentPrompt = Effect.gen(function* () {
-    const promptsDir = expandHome(PROMPTS_DIRECTORY);
-    const reposDir = expandHome(REPOS_DIRECTORY);
-    const promptPath = path.join(promptsDir, DOCS_PROMPT_FILENAME);
+  const promptsDir = expandHome(PROMPTS_DIRECTORY);
+  const reposDir = expandHome(REPOS_DIRECTORY);
+  const promptPath = path.join(promptsDir, DOCS_PROMPT_FILENAME);
 
-    const file = Bun.file(promptPath);
-    const exists = yield* Effect.tryPromise({
-      try: () => file.exists(),
-      catch: (error) =>
-        new ConfigError({
-          message: "Failed to check prompt file",
-          cause: error,
-        }),
+  const ensureDocsAgentPrompt = (args: { repos: Repo[] }) =>
+    Effect.gen(function* () {
+      const { repos } = args;
+
+      yield* Effect.tryPromise({
+        try: () => mkdir(promptsDir, { recursive: true }),
+        catch: (error) =>
+          new ConfigError({
+            message: "Failed to create prompts directory",
+            cause: error,
+          }),
+      });
+
+      const promptContent = getDocsAgentPrompt({
+        repos: Object.values(repos),
+        reposDirectory: reposDir,
+      });
+
+      yield* Effect.tryPromise({
+        try: () => Bun.write(promptPath, promptContent),
+        catch: (error) =>
+          new ConfigError({
+            message: "Failed to write docs agent prompt",
+            cause: error,
+          }),
+      });
+
+      yield* Effect.log(`Wrote docs agent prompt at ${promptPath}`);
     });
 
-    if (exists) {
-      return;
-    }
-
-    yield* Effect.tryPromise({
-      try: () => mkdir(promptsDir, { recursive: true }),
-      catch: (error) =>
-        new ConfigError({
-          message: "Failed to create prompts directory",
-          cause: error,
-        }),
+  const getRepo = (repoName: string) =>
+    Effect.gen(function* () {
+      if (Object.keys(defaultRepos).includes(repoName)) {
+        return defaultRepos[repoName as keyof typeof defaultRepos];
+      }
+      return yield* Effect.fail(new ConfigError({ message: "Repo not found" }));
     });
-
-    const promptContent = DOCS_AGENT_PROMPT({
-      repos: Object.values(repos),
-      reposDirectory: reposDir,
-    });
-
-    yield* Effect.tryPromise({
-      try: () => Bun.write(promptPath, promptContent),
-      catch: (error) =>
-        new ConfigError({
-          message: "Failed to write docs agent prompt",
-          cause: error,
-        }),
-    });
-
-    yield* Effect.log(`Created docs agent prompt at ${promptPath}`);
-  });
-
-  yield* ensureDocsAgentPrompt;
 
   return {
-    getAllRepos: () => Effect.succeed(Object.values(repos)),
-    getRepo: (repoName: RepoName) => Effect.succeed(repos[repoName]),
-    getConfigDirectory: () => Effect.succeed(CONFIG_DIRECTORY),
-    getPromptsDirectory: () => Effect.succeed(PROMPTS_DIRECTORY),
-    getDocsAgentPromptPath: () =>
-      Effect.succeed(
-        path.join(expandHome(PROMPTS_DIRECTORY), DOCS_PROMPT_FILENAME)
-      ),
-    getOpenCodeConfig: (args: { agentPromptPath: string }) =>
+    cloneOrUpdateOneRepoLocally: (repoName: string) =>
+      Effect.gen(function* () {
+        const repo = yield* getRepo(repoName);
+        const repoDir = path.join(reposDir, repo.name);
+        const branch = repo.branch ?? "main";
+
+        const exists = yield* directoryExists(repoDir);
+        if (exists) {
+          yield* Effect.log(`Pulling latest changes for ${repo.name}...`);
+          yield* pullRepo({ repoDir, branch });
+        } else {
+          yield* Effect.log(`Cloning ${repo.name}...`);
+          yield* cloneRepo({ repoDir, url: repo.url, branch });
+        }
+        yield* Effect.log(`Done with ${repo.name}`);
+        return repo;
+      }),
+    loadDocsAgentPrompt: (args: { repos: Repo[] }) =>
+      Effect.gen(function* () {
+        const { repos } = args;
+        yield* ensureDocsAgentPrompt({ repos });
+      }),
+    getOpenCodeConfig: () =>
       Effect.succeed({
         agent: {
           build: {
@@ -154,7 +95,7 @@ const configService = Effect.gen(function* () {
             disable: true,
           },
           docs: {
-            prompt: `{file:${args.agentPromptPath}}`,
+            prompt: `{file:${promptPath}}`,
             disable: false,
             description:
               "Get answers about libraries and frameworks by searching their source code",
