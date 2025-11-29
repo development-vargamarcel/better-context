@@ -84,110 +84,104 @@ When responding:
 
 // NOTE: this is a service because it's also gonna contain user config stuff for better context (where the config file lives, where the repos are cloned to, etc.)
 
-const ensureDocsAgentPrompt = Effect.gen(function* () {
-  const promptsDir = expandHome(PROMPTS_DIRECTORY);
-  const reposDir = expandHome(REPOS_DIRECTORY);
-  const promptPath = path.join(promptsDir, DOCS_PROMPT_FILENAME);
-
-  const file = Bun.file(promptPath);
-  const exists = yield* Effect.tryPromise({
-    try: () => file.exists(),
-    catch: (error) =>
-      new ConfigError({ message: "Failed to check prompt file", cause: error }),
-  });
-
-  if (exists) {
-    return;
-  }
-
-  yield* Effect.tryPromise({
-    try: () => mkdir(promptsDir, { recursive: true }),
-    catch: (error) =>
-      new ConfigError({
-        message: "Failed to create prompts directory",
-        cause: error,
-      }),
-  });
-
-  const promptContent = DOCS_AGENT_PROMPT({
-    repos: Object.values(repos),
-    reposDirectory: reposDir,
-  });
-
-  yield* Effect.tryPromise({
-    try: () => Bun.write(promptPath, promptContent),
-    catch: (error) =>
-      new ConfigError({
-        message: "Failed to write docs agent prompt",
-        cause: error,
-      }),
-  });
-
-  yield* Effect.log(`Created docs agent prompt at ${promptPath}`);
-});
-
 const configService = Effect.gen(function* () {
+  const ensureDocsAgentPrompt = Effect.gen(function* () {
+    const promptsDir = expandHome(PROMPTS_DIRECTORY);
+    const reposDir = expandHome(REPOS_DIRECTORY);
+    const promptPath = path.join(promptsDir, DOCS_PROMPT_FILENAME);
+
+    const file = Bun.file(promptPath);
+    const exists = yield* Effect.tryPromise({
+      try: () => file.exists(),
+      catch: (error) =>
+        new ConfigError({
+          message: "Failed to check prompt file",
+          cause: error,
+        }),
+    });
+
+    if (exists) {
+      return;
+    }
+
+    yield* Effect.tryPromise({
+      try: () => mkdir(promptsDir, { recursive: true }),
+      catch: (error) =>
+        new ConfigError({
+          message: "Failed to create prompts directory",
+          cause: error,
+        }),
+    });
+
+    const promptContent = DOCS_AGENT_PROMPT({
+      repos: Object.values(repos),
+      reposDirectory: reposDir,
+    });
+
+    yield* Effect.tryPromise({
+      try: () => Bun.write(promptPath, promptContent),
+      catch: (error) =>
+        new ConfigError({
+          message: "Failed to write docs agent prompt",
+          cause: error,
+        }),
+    });
+
+    yield* Effect.log(`Created docs agent prompt at ${promptPath}`);
+  });
+
   yield* ensureDocsAgentPrompt;
 
-  const getAllRepos = () => Effect.succeed(Object.values(repos));
-  const getConfigDirectory = () => Effect.succeed(CONFIG_DIRECTORY);
-  const getPromptsDirectory = () => Effect.succeed(PROMPTS_DIRECTORY);
-  const getDocsAgentPromptPath = () =>
-    Effect.succeed(
-      path.join(expandHome(PROMPTS_DIRECTORY), DOCS_PROMPT_FILENAME)
-    );
-
-  const getRepo = (repoName: RepoName) => Effect.succeed(repos[repoName]);
-
-  const getOpenCodeConfig = (args: { agentPromptPath: string }) =>
-    Effect.succeed({
-      agent: {
-        build: {
-          disable: true,
-        },
-        general: {
-          disable: true,
-        },
-        plan: {
-          disable: true,
-        },
-        docs: {
-          prompt: `{file:${args.agentPromptPath}}`,
-          disable: false,
-          description:
-            "Get answers about libraries and frameworks by searching their source code",
-          permission: {
-            webfetch: "allow",
-            edit: "deny",
-            bash: "allow",
-            external_directory: "allow",
-            doom_loop: "deny",
-          },
-          mode: "primary",
-          tools: {
-            write: false,
-            bash: true,
-            delete: false,
-            read: true,
-            grep: true,
-            glob: true,
-            list: true,
-            path: false,
-            todowrite: false,
-            todoread: false,
-            websearch: true,
-          },
-        },
-      },
-    } satisfies Config);
-
   return {
-    getAllRepos,
-    getRepo,
-    getConfigDirectory,
-    getPromptsDirectory,
-    getDocsAgentPromptPath,
-    getOpenCodeConfig,
+    getAllRepos: () => Effect.succeed(Object.values(repos)),
+    getRepo: (repoName: RepoName) => Effect.succeed(repos[repoName]),
+    getConfigDirectory: () => Effect.succeed(CONFIG_DIRECTORY),
+    getPromptsDirectory: () => Effect.succeed(PROMPTS_DIRECTORY),
+    getDocsAgentPromptPath: () =>
+      Effect.succeed(
+        path.join(expandHome(PROMPTS_DIRECTORY), DOCS_PROMPT_FILENAME)
+      ),
+    getOpenCodeConfig: (args: { agentPromptPath: string }) =>
+      Effect.succeed({
+        agent: {
+          build: {
+            disable: true,
+          },
+          general: {
+            disable: true,
+          },
+          plan: {
+            disable: true,
+          },
+          docs: {
+            prompt: `{file:${args.agentPromptPath}}`,
+            disable: false,
+            description:
+              "Get answers about libraries and frameworks by searching their source code",
+            permission: {
+              webfetch: "allow",
+              edit: "deny",
+              bash: "allow",
+              external_directory: "allow",
+              doom_loop: "deny",
+            },
+            mode: "primary",
+            tools: {
+              write: false,
+              bash: true,
+              delete: false,
+              read: true,
+              grep: true,
+              glob: true,
+              list: true,
+              path: false,
+              todowrite: false,
+              todoread: false,
+              websearch: true,
+            },
+          },
+        },
+      } satisfies Config),
   };
 });
 

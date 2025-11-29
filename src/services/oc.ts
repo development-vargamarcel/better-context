@@ -14,103 +14,6 @@ class OcError extends TaggedError("OcError")<{
 
 export type { Event as OcEvent };
 
-const streamSessionEvents = (args: {
-  client: OpencodeClient;
-  sessionID: string;
-}) =>
-  Effect.gen(function* () {
-    const { client, sessionID } = args;
-
-    const events = yield* Effect.tryPromise({
-      try: () => client.event.subscribe(),
-      catch: (err) =>
-        new OcError({ message: "Failed to subscribe to events", cause: err }),
-    });
-
-    return Stream.fromAsyncIterable(
-      events.stream,
-      (e) => new OcError({ message: "Event stream error", cause: e })
-    ).pipe(
-      Stream.filter((event) => {
-        const props = event.properties as {
-          sessionID?: string;
-          part?: { sessionID?: string };
-        };
-        return (
-          props.sessionID === sessionID || props.part?.sessionID === sessionID
-        );
-      }),
-      Stream.takeUntil(
-        (event) =>
-          event.type === "session.idle" &&
-          event.properties.sessionID === sessionID
-      )
-    );
-  });
-
-const firePrompt = (args: {
-  client: OpencodeClient;
-  sessionID: string;
-  text: string;
-  errorDeferred: Deferred.Deferred<never, OcError>;
-}) =>
-  Effect.promise(() =>
-    args.client.session.prompt({
-      path: { id: args.sessionID },
-      body: {
-        agent: "docs",
-        model: {
-          providerID: "opencode",
-          modelID: "claude-haiku-4-5",
-        },
-        parts: [{ type: "text", text: args.text }],
-      },
-    })
-  ).pipe(
-    Effect.catchAll((err) =>
-      Deferred.fail(
-        args.errorDeferred,
-        new OcError({ message: String(err), cause: err })
-      )
-    )
-  );
-
-const streamPrompt = (args: {
-  client: OpencodeClient;
-  sessionID: string;
-  prompt: string;
-}) =>
-  Effect.gen(function* () {
-    const { client, sessionID, prompt } = args;
-
-    const eventStream = yield* streamSessionEvents({ client, sessionID });
-
-    const errorDeferred = yield* Deferred.make<never, OcError>();
-
-    yield* firePrompt({ client, sessionID, text: prompt, errorDeferred }).pipe(
-      Effect.forkDaemon
-    );
-
-    // Transform stream to fail on session.error, race with prompt error
-    return eventStream.pipe(
-      Stream.mapEffect((event) =>
-        Effect.gen(function* () {
-          if (event.type === "session.error") {
-            const props = event.properties as { error?: { name?: string } };
-            return yield* Effect.fail(
-              new OcError({
-                message: props.error?.name ?? "Unknown session error",
-                cause: props.error,
-              })
-            );
-          }
-          return event;
-        })
-      ),
-      Stream.interruptWhen(Deferred.await(errorDeferred))
-    );
-  });
-
 const ocService = Effect.gen(function* () {
   const config = yield* ConfigService;
   const agentPromptPath = yield* config.getDocsAgentPromptPath();
@@ -133,6 +36,94 @@ const ocService = Effect.gen(function* () {
     })
   );
 
+  const streamSessionEvents = (args: { sessionID: string }) =>
+    Effect.gen(function* () {
+      const { sessionID } = args;
+
+      const events = yield* Effect.tryPromise({
+        try: () => client.event.subscribe(),
+        catch: (err) =>
+          new OcError({
+            message: "Failed to subscribe to events",
+            cause: err,
+          }),
+      });
+
+      return Stream.fromAsyncIterable(
+        events.stream,
+        (e) => new OcError({ message: "Event stream error", cause: e })
+      ).pipe(
+        Stream.filter((event) => {
+          const props = event.properties;
+          if (!("sessionID" in props)) return true;
+          return props.sessionID === sessionID;
+        }),
+        Stream.takeUntil(
+          (event) =>
+            event.type === "session.idle" &&
+            event.properties.sessionID === sessionID
+        )
+      );
+    });
+
+  const firePrompt = (args: {
+    sessionID: string;
+    text: string;
+    errorDeferred: Deferred.Deferred<never, OcError>;
+  }) =>
+    Effect.promise(() =>
+      client.session.prompt({
+        path: { id: args.sessionID },
+        body: {
+          agent: "docs",
+          model: {
+            providerID: "opencode",
+            modelID: "claude-haiku-4-5",
+          },
+          parts: [{ type: "text", text: args.text }],
+        },
+      })
+    ).pipe(
+      Effect.catchAll((err) =>
+        Deferred.fail(
+          args.errorDeferred,
+          new OcError({ message: String(err), cause: err })
+        )
+      )
+    );
+
+  const streamPrompt = (args: { sessionID: string; prompt: string }) =>
+    Effect.gen(function* () {
+      const { sessionID, prompt } = args;
+
+      const eventStream = yield* streamSessionEvents({ sessionID });
+
+      const errorDeferred = yield* Deferred.make<never, OcError>();
+
+      yield* firePrompt({ sessionID, text: prompt, errorDeferred }).pipe(
+        Effect.forkDaemon
+      );
+
+      // Transform stream to fail on session.error, race with prompt error
+      return eventStream.pipe(
+        Stream.mapEffect((event) =>
+          Effect.gen(function* () {
+            if (event.type === "session.error") {
+              const props = event.properties as { error?: { name?: string } };
+              return yield* Effect.fail(
+                new OcError({
+                  message: props.error?.name ?? "Unknown session error",
+                  cause: props.error,
+                })
+              );
+            }
+            return event;
+          })
+        ),
+        Stream.interruptWhen(Deferred.await(errorDeferred))
+      );
+    });
+
   return {
     testPrompting: (prompt: string) =>
       Effect.gen(function* () {
@@ -150,7 +141,7 @@ const ocService = Effect.gen(function* () {
         const sessionID = session.data.id;
         yield* Effect.log(`PROMPTING WITH: ${prompt}`);
 
-        return yield* streamPrompt({ client, sessionID, prompt });
+        return yield* streamPrompt({ sessionID, prompt });
       }),
   };
 });
