@@ -18,8 +18,12 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@effect/cli": "^0.72.1",
     "@effect/platform": "^0.93.5",
     "@effect/platform-bun": "^0.85.0",
+    "@effect/printer": "^0.47.0",
+    "@effect/printer-ansi": "^0.47.0",
+    "@effect/typeclass": "^0.38.0",
     "@opencode-ai/sdk": "^1.0.119",
     "effect": "^3.19.8"
   }
