@@ -28,7 +28,7 @@
     "cli:serve": "bun run apps/cli/src/index.ts serve",
     "cli:open": "bun run apps/cli/src/index.ts open",
     "build": "turbo run build",
-    "typecheck": "turbo run typecheck"
+    "check": "turbo run check"
   },
   "devDependencies": {
     "@types/bun": "latest",

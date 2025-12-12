@@ -8,12 +8,13 @@ import {
 import { BunHttpServer } from "@effect/platform-bun";
 import { Effect, Layer, Schema, Stream } from "effect";
 import { OcService, type OcEvent } from "./oc.ts";
+import { ConfigService } from "./config.ts";
 
 declare const __VERSION__: string;
 const VERSION: string =
   typeof __VERSION__ !== "undefined" ? __VERSION__ : "0.0.0-dev";
 
-const programLayer = Layer.mergeAll(OcService.Default);
+const programLayer = Layer.mergeAll(OcService.Default, ConfigService.Default);
 
 // === Ask Subcommand ===
 const questionOption = Options.text("question").pipe(Options.withAlias("q"));
@@ -56,20 +57,28 @@ const askCommand = Command.make(
         InvalidProviderError: (e) =>
           Effect.sync(() => {
             console.error(`Error: Unknown provider "${e.providerId}"`);
-            console.error(`Available providers: ${e.availableProviders.join(", ")}`);
+            console.error(
+              `Available providers: ${e.availableProviders.join(", ")}`
+            );
             process.exit(1);
           }),
         InvalidModelError: (e) =>
           Effect.sync(() => {
-            console.error(`Error: Unknown model "${e.modelId}" for provider "${e.providerId}"`);
+            console.error(
+              `Error: Unknown model "${e.modelId}" for provider "${e.providerId}"`
+            );
             console.error(`Available models: ${e.availableModels.join(", ")}`);
             process.exit(1);
           }),
         ProviderNotConnectedError: (e) =>
           Effect.sync(() => {
             console.error(`Error: Provider "${e.providerId}" is not connected`);
-            console.error(`Connected providers: ${e.connectedProviders.join(", ")}`);
-            console.error(`Run "opencode auth" to configure provider credentials.`);
+            console.error(
+              `Connected providers: ${e.connectedProviders.join(", ")}`
+            );
+            console.error(
+              `Run "opencode auth" to configure provider credentials.`
+            );
             process.exit(1);
           }),
       }),
@@ -163,13 +172,28 @@ const serveCommand = Command.make("serve", { port: portOption }, ({ port }) =>
   }).pipe(Effect.scoped, Effect.provide(programLayer))
 );
 
+const configPathCommand = Command.make("config", {}, () =>
+  Effect.gen(function* () {
+    const config = yield* ConfigService;
+    const configPath = yield* config.getConfigPath();
+
+    console.log(`Update your config file at ${configPath}`);
+  }).pipe(Effect.provide(programLayer))
+);
+
 // === Main Command ===
 const mainCommand = Command.make("btca", {}, () =>
   Effect.sync(() => {
     console.log(`btca v${VERSION}. run btca --help for more information.`);
   })
 ).pipe(
-  Command.withSubcommands([askCommand, serveCommand, openCommand, chatCommand])
+  Command.withSubcommands([
+    askCommand,
+    serveCommand,
+    openCommand,
+    chatCommand,
+    configPathCommand,
+  ])
 );
 
 const cliService = Effect.gen(function* () {

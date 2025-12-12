@@ -4,14 +4,14 @@
 	import ogImage from '$lib/assets/og.png';
 	import { getInitialTheme, setTheme, type Theme } from '$lib/theme';
 	import { Bot, Github, Moon, Sun } from '@lucide/svelte';
-	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 
 	let { children } = $props();
 
 	let theme = $state<Theme>('dark');
-	const fullBleed = $derived($page.url.pathname === '/og');
-	const ogImageUrl = $derived(new URL(ogImage, $page.url).href);
+	const fullBleed = $derived(page.url.pathname === '/og');
+	const ogImageUrl = $derived(new URL(ogImage, page.url).href);
 
 	const toggleTheme = () => {
 		theme = theme === 'dark' ? 'light' : 'dark';

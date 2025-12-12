@@ -9,12 +9,11 @@ import { directoryExists, expandHome } from "../lib/utils/files.ts";
 const CONFIG_DIRECTORY = "~/.config/btca";
 const CONFIG_FILENAME = "btca.json";
 
-// TODO: figure out why grok code sucks so much
-
 const repoSchema = Schema.Struct({
   name: Schema.String,
   url: Schema.String,
   branch: Schema.String,
+  specialNotes: Schema.String.pipe(Schema.optional),
 });
 
 const configSchema = Schema.Struct({
@@ -39,6 +38,8 @@ const DEFAULT_CONFIG: Config = {
       name: "svelte",
       url: "https://github.com/sveltejs/svelte.dev",
       branch: "main",
+      specialNotes:
+        "This is the svelte docs website repo, not the actual svelte repo. Use the docs to answer questions about svelte.",
     },
     {
       name: "effect",
@@ -58,6 +59,7 @@ const DEFAULT_CONFIG: Config = {
 const OPENCODE_CONFIG = (args: {
   repoName: string;
   reposDirectory: string;
+  specialNotes?: string;
 }): Effect.Effect<OpenCodeConfig, never, Path.Path> =>
   Effect.gen(function* () {
     const path = yield* Path.Path;
@@ -75,13 +77,11 @@ const OPENCODE_CONFIG = (args: {
         plan: {
           disable: true,
         },
-        ask: {
-          disable: true,
-        },
         docs: {
           prompt: getDocsAgentPrompt({
             repoName: args.repoName,
             repoPath: path.join(args.reposDirectory, args.repoName),
+            specialNotes: args.specialNotes,
           }),
           disable: false,
           description:
@@ -89,14 +89,14 @@ const OPENCODE_CONFIG = (args: {
           permission: {
             webfetch: "deny",
             edit: "deny",
-            bash: "allow",
+            bash: "deny",
             external_directory: "allow",
             doom_loop: "deny",
           },
           mode: "primary",
           tools: {
             write: false,
-            bash: true,
+            bash: false,
             delete: false,
             read: true,
             grep: true,
@@ -126,27 +126,33 @@ const onStartLoadConfig = Effect.gen(function* () {
       `Config file not found at ${configPath}, creating default config...`
     );
     // Ensure directory exists
-    yield* fs.makeDirectory(configDir, { recursive: true }).pipe(
-      Effect.catchAll(() => Effect.void)
-    );
-    yield* fs.writeFileString(configPath, JSON.stringify(DEFAULT_CONFIG, null, 2)).pipe(
-      Effect.catchAll((error) =>
-        Effect.fail(
-          new ConfigError({
-            message: "Failed to create default config",
-            cause: error,
-          })
+    yield* fs
+      .makeDirectory(configDir, { recursive: true })
+      .pipe(Effect.catchAll(() => Effect.void));
+    yield* fs
+      .writeFileString(configPath, JSON.stringify(DEFAULT_CONFIG, null, 2))
+      .pipe(
+        Effect.catchAll((error) =>
+          Effect.fail(
+            new ConfigError({
+              message: "Failed to create default config",
+              cause: error,
+            })
+          )
         )
-      )
-    );
+      );
     yield* Effect.log(`Default config created at ${configPath}`);
     const promptsDir = yield* expandHome(DEFAULT_CONFIG.promptsDirectory);
     const reposDir = yield* expandHome(DEFAULT_CONFIG.reposDirectory);
-    return {
+    const config = {
       ...DEFAULT_CONFIG,
       promptsDirectory: promptsDir,
       reposDirectory: reposDir,
     } satisfies Config;
+    return {
+      config,
+      configPath,
+    };
   } else {
     const content = yield* fs.readFileString(configPath).pipe(
       Effect.catchAll((error) =>
@@ -165,11 +171,15 @@ const onStartLoadConfig = Effect.gen(function* () {
         Effect.gen(function* () {
           const promptsDir = yield* expandHome(loadedConfig.promptsDirectory);
           const reposDir = yield* expandHome(loadedConfig.reposDirectory);
-          return {
+          const config = {
             ...loadedConfig,
             promptsDirectory: promptsDir,
             reposDirectory: reposDir,
           } satisfies Config;
+          return {
+            config,
+            configPath,
+          };
         })
       )
     );
@@ -178,7 +188,9 @@ const onStartLoadConfig = Effect.gen(function* () {
 
 const configService = Effect.gen(function* () {
   const path = yield* Path.Path;
-  const config = yield* onStartLoadConfig;
+  const loadedConfig = yield* onStartLoadConfig;
+
+  const { config, configPath } = loadedConfig;
 
   const getRepo = ({
     repoName,
@@ -198,6 +210,7 @@ const configService = Effect.gen(function* () {
     });
 
   return {
+    getConfigPath: () => Effect.succeed(configPath),
     cloneOrUpdateOneRepoLocally: (repoName: string) =>
       Effect.gen(function* () {
         const repo = yield* getRepo({ repoName, config });
@@ -216,7 +229,16 @@ const configService = Effect.gen(function* () {
         return repo;
       }),
     getOpenCodeConfig: (args: { repoName: string }) =>
-      OPENCODE_CONFIG({ repoName: args.repoName, reposDirectory: config.reposDirectory }),
+      Effect.gen(function* () {
+        const repo = yield* getRepo({ repoName: args.repoName, config }).pipe(
+          Effect.catchTag("ConfigError", () => Effect.succeed(undefined))
+        );
+        return yield* OPENCODE_CONFIG({
+          repoName: args.repoName,
+          reposDirectory: config.reposDirectory,
+          specialNotes: repo?.specialNotes,
+        });
+      }),
     rawConfig: () => Effect.succeed(config),
   };
 });

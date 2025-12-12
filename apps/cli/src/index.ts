@@ -12,8 +12,9 @@ Effect.gen(function* () {
     teardown: (exit) => {
       // Force exit: opencode SDK's server.close() sends SIGTERM but doesn't
       // wait for child process termination, keeping Node's event loop alive
-      const code = Exit.isFailure(exit) && !Cause.isInterruptedOnly(exit.cause) ? 1 : 0;
+      const code =
+        Exit.isFailure(exit) && !Cause.isInterruptedOnly(exit.cause) ? 1 : 0;
       process.exit(code);
-    }
+    },
   })
 );

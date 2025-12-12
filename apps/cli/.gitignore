@@ -1,6 +1,8 @@
 # dependencies (bun install)
 node_modules
 
+dist-check
+
 # output
 out
 dist
