@@ -1,5 +1,5 @@
 import { createContext, onDestroy, onMount } from 'svelte';
-import { createHighlighter, type Highlighter } from 'shiki';
+import { createHighlighter, type Highlighter } from 'shiki/bundle/web';
 
 class ShikiStore {
 	private highlighterPromise = createHighlighter({
