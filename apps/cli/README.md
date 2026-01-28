@@ -78,6 +78,26 @@ Hold an OpenCode instance in the background for faster subsequent queries.
 btca open
 ```
 
+### `btca history`
+
+Manage and view your question history.
+
+#### `btca history list`
+
+List the most recent questions and answers.
+
+```bash
+btca history list
+```
+
+#### `btca history clear`
+
+Clear all history.
+
+```bash
+btca history clear
+```
+
 ### `btca config`
 
 Manage CLI configuration. Shows the config file path when run without subcommands.

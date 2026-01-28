@@ -45,6 +45,12 @@ Keep an OpenCode instance running:
 btca open
 ```
 
+View history:
+
+```bash
+btca history list
+```
+
 ## Config
 
 On first run, `btca` creates a default config at `~/.config/btca/btca.json`. That’s where the repo list + model/provider live.

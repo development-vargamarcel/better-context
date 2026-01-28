@@ -4,11 +4,12 @@ import { BunHttpServer } from '@effect/platform-bun';
 import { Effect, Layer, Schema, Stream } from 'effect';
 import { OcService, type OcEvent } from './oc.ts';
 import { ConfigService } from './config.ts';
+import { HistoryService } from './history.ts';
 
 declare const __VERSION__: string;
 const VERSION: string = typeof __VERSION__ !== 'undefined' ? __VERSION__ : '0.0.0-dev';
 
-const programLayer = Layer.mergeAll(OcService.Default, ConfigService.Default);
+const programLayer = Layer.mergeAll(OcService.Default, ConfigService.Default, HistoryService.Default);
 
 // === Ask Subcommand ===
 const questionOption = Options.text('question').pipe(Options.withAlias('q'));
@@ -20,9 +21,11 @@ const askCommand = Command.make(
 	({ question, tech }) =>
 		Effect.gen(function* () {
 			const oc = yield* OcService;
+			const history = yield* HistoryService;
 			const eventStream = yield* oc.askQuestion({ tech, question });
 
 			let currentMessageId: string | null = null;
+			let fullAnswer = '';
 
 			yield* eventStream.pipe(
 				Stream.runForEach((event) =>
@@ -31,10 +34,14 @@ const askCommand = Command.make(
 							case 'message.part.updated':
 								if (event.properties.part.type === 'text') {
 									if (currentMessageId === event.properties.part.messageID) {
-										process.stdout.write(event.properties.delta ?? '');
+										const delta = event.properties.delta ?? '';
+										process.stdout.write(delta);
+										fullAnswer += delta;
 									} else {
 										currentMessageId = event.properties.part.messageID;
-										process.stdout.write('\n\n' + event.properties.part.text);
+										const text = event.properties.part.text ?? '';
+										process.stdout.write('\n\n' + text);
+										fullAnswer += '\n\n' + text;
 									}
 								}
 								break;
@@ -44,6 +51,10 @@ const askCommand = Command.make(
 					})
 				)
 			);
+
+			if (fullAnswer.trim()) {
+				yield* history.addEntry({ tech, question, answer: fullAnswer.trim() });
+			}
 
 			console.log('\n');
 		}).pipe(
@@ -151,6 +162,49 @@ const serveCommand = Command.make('serve', { port: portOption }, ({ port }) =>
 		return yield* Layer.launch(HttpLive);
 	}).pipe(Effect.scoped, Effect.provide(programLayer))
 );
+
+// === History Subcommands ===
+
+const historyListCommand = Command.make('list', {}, () =>
+	Effect.gen(function* () {
+		const history = yield* HistoryService;
+		const entries = yield* history.getEntries(10);
+
+		if (entries.length === 0) {
+			console.log('No history found.');
+			return;
+		}
+
+		console.log('Recent History:\n');
+		for (const entry of entries) {
+			const date = new Date(entry.timestamp).toLocaleString();
+			console.log(`[${date}] ${entry.tech}`);
+			console.log(`Q: ${entry.question}`);
+			console.log(
+				`A: ${entry.answer.substring(0, 100).replace(/\n/g, ' ')}${entry.answer.length > 100 ? '...' : ''}`
+			);
+			console.log('');
+		}
+	}).pipe(Effect.provide(programLayer))
+);
+
+const historyClearCommand = Command.make('clear', {}, () =>
+	Effect.gen(function* () {
+		const history = yield* HistoryService;
+		yield* history.clearHistory();
+		console.log('History cleared.');
+	}).pipe(Effect.provide(programLayer))
+);
+
+const historyCommand = Command.make('history', {}, () =>
+	Effect.sync(() => {
+		console.log('Usage: btca history <command>');
+		console.log('');
+		console.log('Commands:');
+		console.log('  list    List recent history');
+		console.log('  clear   Clear history');
+	})
+).pipe(Command.withSubcommands([historyListCommand, historyClearCommand]));
 
 // === Config Subcommands ===
 
@@ -291,7 +345,14 @@ const mainCommand = Command.make('btca', {}, () =>
 		console.log(`btca v${VERSION}. run btca --help for more information.`);
 	})
 ).pipe(
-	Command.withSubcommands([askCommand, serveCommand, openCommand, chatCommand, configCommand])
+	Command.withSubcommands([
+		askCommand,
+		serveCommand,
+		openCommand,
+		chatCommand,
+		configCommand,
+		historyCommand
+	])
 );
 
 const cliService = Effect.gen(function* () {

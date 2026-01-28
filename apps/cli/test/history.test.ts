@@ -1,0 +1,68 @@
+import { describe, expect, test, beforeEach, afterEach } from "bun:test";
+import { Effect } from "effect";
+import { HistoryService } from "../src/services/history";
+import { BunContext } from "@effect/platform-bun";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+import * as os from "node:os";
+
+const tmpDir = path.join(os.tmpdir(), "btca-test-" + Math.random().toString(36).slice(2));
+
+describe("HistoryService", () => {
+  const OriginalHome = Bun.env.HOME;
+
+  beforeEach(async () => {
+    Bun.env.HOME = tmpDir;
+    await fs.mkdir(tmpDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    Bun.env.HOME = OriginalHome;
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  test("addEntry and getEntries", async () => {
+    const program = Effect.gen(function* () {
+      const history = yield* HistoryService;
+      yield* history.addEntry({
+        tech: "svelte",
+        question: "what is rune?",
+        answer: "magic",
+      });
+
+      const entries = yield* history.getEntries();
+      expect(entries.length).toBe(1);
+      expect(entries[0].tech).toBe("svelte");
+      expect(entries[0].answer).toBe("magic");
+    });
+
+    await Effect.runPromise(
+      program.pipe(
+        Effect.provide(HistoryService.Default),
+        Effect.provide(BunContext.layer)
+      )
+    );
+  });
+
+  test("clearHistory", async () => {
+    const program = Effect.gen(function* () {
+      const history = yield* HistoryService;
+      yield* history.addEntry({
+        tech: "svelte",
+        question: "what is rune?",
+        answer: "magic",
+      });
+
+      yield* history.clearHistory();
+      const entries = yield* history.getEntries();
+      expect(entries.length).toBe(0);
+    });
+
+    await Effect.runPromise(
+      program.pipe(
+        Effect.provide(HistoryService.Default),
+        Effect.provide(BunContext.layer)
+      )
+    );
+  });
+});
