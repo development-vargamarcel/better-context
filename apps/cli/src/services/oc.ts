@@ -180,10 +180,14 @@ const ocService = Effect.gen(function* () {
     });
 
   return {
+    /**
+     * Spawns the OpenCode TUI for the specified technology.
+     */
     spawnTui: (args: { tech: string }) =>
       Effect.gen(function* () {
         const { tech } = args;
 
+        yield* Effect.log(`Spawning TUI for ${tech}...`);
         yield* config.cloneOrUpdateOneRepoLocally(tech);
 
         const configObject = yield* config.getOpenCodeConfig({
@@ -196,6 +200,10 @@ const ocService = Effect.gen(function* () {
             new OcError({ message: "TUI exited with error", cause: err }),
         });
       }),
+    /**
+     * Holds an OpenCode instance open in the background.
+     * Useful for keeping the server warm.
+     */
     holdOpenInstanceInBg: () =>
       Effect.gen(function* () {
         const { client, server } = yield* getOpencodeInstance({
@@ -206,10 +214,15 @@ const ocService = Effect.gen(function* () {
 
         yield* Effect.sleep(Duration.days(1));
       }),
+    /**
+     * Asks a question about the specified technology.
+     * Returns a stream of events.
+     */
     askQuestion: (args: { question: string; tech: string }) =>
       Effect.gen(function* () {
         const { question, tech } = args;
 
+        yield* Effect.log(`Asking question about ${tech}...`);
         yield* config.cloneOrUpdateOneRepoLocally(tech);
 
         const { client, server } = yield* getOpencodeInstance({ tech });
@@ -220,6 +233,7 @@ const ocService = Effect.gen(function* () {
           rawConfig.model
         );
 
+        yield* Effect.log(`Creating OpenCode session...`);
         const session = yield* Effect.promise(() => client.session.create());
 
         if (session.error) {
@@ -232,6 +246,7 @@ const ocService = Effect.gen(function* () {
         }
 
         const sessionID = session.data.id;
+        yield* Effect.log(`Session created with ID ${sessionID}`);
 
         return yield* streamPrompt({
           sessionID,

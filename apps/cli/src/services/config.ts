@@ -253,6 +253,9 @@ const configService = Effect.gen(function* () {
 
   return {
     getConfigPath: () => Effect.succeed(configPath),
+    /**
+     * Clones or pulls the specified repository locally.
+     */
     cloneOrUpdateOneRepoLocally: (repoName: string) =>
       Effect.gen(function* () {
         const repo = yield* getRepo({ repoName, config });
@@ -270,6 +273,9 @@ const configService = Effect.gen(function* () {
         yield* Effect.log(`Done with ${repo.name}`);
         return repo;
       }),
+    /**
+     * Generates the OpenCode configuration for the specified repository.
+     */
     getOpenCodeConfig: (args: { repoName: string }) =>
       Effect.gen(function* () {
         const repo = yield* getRepo({ repoName: args.repoName, config }).pipe(
@@ -285,12 +291,18 @@ const configService = Effect.gen(function* () {
     getRepos: () => Effect.succeed(config.repos),
     getModel: () =>
       Effect.succeed({ provider: config.provider, model: config.model }),
+    /**
+     * Updates the AI model and provider configuration.
+     */
     updateModel: (args: { provider: string; model: string }) =>
       Effect.gen(function* () {
         config = { ...config, provider: args.provider, model: args.model };
         yield* writeConfig(config);
         return { provider: config.provider, model: config.model };
       }),
+    /**
+     * Adds a new repository to the configuration.
+     */
     addRepo: (repo: Repo) =>
       Effect.gen(function* () {
         const existing = config.repos.find((r) => r.name === repo.name);
