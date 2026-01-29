@@ -33,6 +33,7 @@ Run:
 Available <tech>: svelte, tailwindcss`;
 
 	const ASK_CMD = `btca ask -t svelte -q "How do stores work in Svelte 5?"`;
+	const HISTORY_CMD = `btca history list`;
 	const CHAT_CMD = `btca chat -t svelte`;
 	const SERVE_CMD = `btca serve -p 8081`;
 
@@ -238,13 +239,45 @@ Available <tech>: svelte, tailwindcss`;
 			Most of the time you'll use <code
 				class="rounded bg-neutral-900/5 px-1 py-0.5 text-xs dark:bg-white/10">ask</code
 			>. Use
+			<code class="rounded bg-neutral-900/5 px-1 py-0.5 text-xs dark:bg-white/10">history</code> to see
+			past questions,
 			<code class="rounded bg-neutral-900/5 px-1 py-0.5 text-xs dark:bg-white/10">chat</code> for an
 			interactive session, and
 			<code class="rounded bg-neutral-900/5 px-1 py-0.5 text-xs dark:bg-white/10">serve</code> when you
 			want an HTTP API.
 		</p>
 
-		<div class="mt-4 grid gap-4 md:grid-cols-3">
+		<div class="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+			<div
+				class="min-w-0 rounded-2xl border border-orange-500/20 bg-orange-500/10 p-5 shadow-sm dark:border-orange-500/25 dark:bg-orange-500/10"
+			>
+				<div class="text-sm font-semibold text-neutral-950 dark:text-neutral-50">History</div>
+				<div class="mt-1 text-sm text-neutral-700 dark:text-neutral-300">
+					View past questions
+				</div>
+				<div
+					class="relative mt-3 min-w-0 overflow-hidden rounded-xl border border-neutral-200 bg-white/70 dark:border-neutral-800 dark:bg-neutral-950/40"
+				>
+					<div class="flex items-center justify-between gap-3 p-4">
+						<div class="min-w-0 flex-1 overflow-x-auto">
+							{#if shikiStore.highlighter}
+								{@html shikiStore.highlighter.codeToHtml(HISTORY_CMD, {
+									theme: shikiTheme,
+									lang: 'bash',
+									rootStyle: 'background-color: transparent; padding: 0; margin: 0;'
+								})}
+							{:else}
+								<pre
+									class="m-0 whitespace-pre text-sm leading-relaxed text-neutral-900 dark:text-neutral-50"><code
+										>{HISTORY_CMD}</code
+									></pre>
+							{/if}
+						</div>
+						<CopyButton text={HISTORY_CMD} label="Copy history command" />
+					</div>
+				</div>
+			</div>
+
 			<div
 				class="min-w-0 rounded-2xl border border-orange-500/20 bg-orange-500/10 p-5 shadow-sm dark:border-orange-500/25 dark:bg-orange-500/10"
 			>
