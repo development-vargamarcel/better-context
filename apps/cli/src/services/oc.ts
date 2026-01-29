@@ -180,6 +180,9 @@ const ocService = Effect.gen(function* () {
     });
 
   return {
+    /**
+     * Spawns the OpenCode TUI for the specified technology.
+     */
     spawnTui: (args: { tech: string }) =>
       Effect.gen(function* () {
         const { tech } = args;
@@ -197,6 +200,10 @@ const ocService = Effect.gen(function* () {
             new OcError({ message: "TUI exited with error", cause: err }),
         });
       }),
+    /**
+     * Holds an OpenCode instance open in the background.
+     * Useful for keeping the server warm.
+     */
     holdOpenInstanceInBg: () =>
       Effect.gen(function* () {
         const { client, server } = yield* getOpencodeInstance({
@@ -207,6 +214,10 @@ const ocService = Effect.gen(function* () {
 
         yield* Effect.sleep(Duration.days(1));
       }),
+    /**
+     * Asks a question about the specified technology.
+     * Returns a stream of events.
+     */
     askQuestion: (args: { question: string; tech: string }) =>
       Effect.gen(function* () {
         const { question, tech } = args;

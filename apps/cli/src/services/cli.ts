@@ -357,6 +357,9 @@ const mainCommand = Command.make('btca', {}, () =>
 
 const cliService = Effect.gen(function* () {
 	return {
+		/**
+		 * Runs the CLI application with the given arguments.
+		 */
 		run: (argv: string[]) =>
 			Command.run(mainCommand, {
 				name: 'btca',

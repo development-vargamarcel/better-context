@@ -25,12 +25,19 @@ const DEFAULT_HISTORY: History = {
   entries: [],
 };
 
+/**
+ * Resolves the path to the history file.
+ */
 const getHistoryPath = Effect.gen(function* () {
   const path = yield* Path.Path;
   const historyDir = yield* expandHome(HISTORY_DIRECTORY);
   return path.join(historyDir, HISTORY_FILENAME);
 });
 
+/**
+ * Loads the history from the file system.
+ * Returns default history if file doesn't exist or is invalid.
+ */
 const loadHistory = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const historyPath = yield* getHistoryPath;
@@ -69,6 +76,9 @@ const loadHistory = Effect.gen(function* () {
   }
 });
 
+/**
+ * Saves the history to the file system.
+ */
 const saveHistory = (history: History) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -90,6 +100,10 @@ const saveHistory = (history: History) =>
 
 const historyService = Effect.gen(function* () {
   return {
+    /**
+     * Adds a new entry to the history.
+     * Trims history to the last 100 entries.
+     */
     addEntry: (entry: Omit<HistoryEntry, "id" | "timestamp">) =>
       Effect.gen(function* () {
         const history = yield* loadHistory;
@@ -103,11 +117,17 @@ const historyService = Effect.gen(function* () {
         yield* saveHistory({ entries: updatedEntries });
         return newEntry;
       }),
+    /**
+     * Retrieves the most recent history entries.
+     */
     getEntries: (limit = 10) =>
       Effect.gen(function* () {
         const history = yield* loadHistory;
         return history.entries.slice(0, limit);
       }),
+    /**
+     * Clears all history entries.
+     */
     clearHistory: () =>
       Effect.gen(function* () {
         yield* saveHistory(DEFAULT_HISTORY);
