@@ -44,6 +44,68 @@ describe("HistoryService", () => {
     );
   });
 
+  test("getAllEntries", async () => {
+    const program = Effect.gen(function* () {
+      const history = yield* HistoryService;
+      yield* history.addEntry({
+        tech: "svelte",
+        question: "q1",
+        answer: "a1",
+      });
+      yield* history.addEntry({
+        tech: "react",
+        question: "q2",
+        answer: "a2",
+      });
+
+      const entries = yield* history.getAllEntries();
+      expect(entries.length).toBe(2);
+    });
+
+    await Effect.runPromise(
+      program.pipe(
+        Effect.provide(HistoryService.Default),
+        Effect.provide(BunContext.layer)
+      )
+    );
+  });
+
+  test("exportHistory", async () => {
+    const program = Effect.gen(function* () {
+      const history = yield* HistoryService;
+      yield* history.addEntry({
+        tech: "svelte",
+        question: "q1",
+        answer: "a1",
+      });
+
+      const jsonPath = path.join(tmpDir, "history.json");
+      yield* history.exportHistory("json", jsonPath);
+      const jsonContent = yield* Effect.promise(() =>
+        fs.readFile(jsonPath, "utf-8")
+      );
+      const json = JSON.parse(jsonContent);
+      expect(json.length).toBe(1);
+      expect(json[0].tech).toBe("svelte");
+
+      const mdPath = path.join(tmpDir, "history.md");
+      yield* history.exportHistory("markdown", mdPath);
+      const mdContent = yield* Effect.promise(() =>
+        fs.readFile(mdPath, "utf-8")
+      );
+      expect(mdContent).toContain("# BTCA History Export");
+      expect(mdContent).toContain("Tech: svelte");
+      expect(mdContent).toContain("**Question:** q1");
+    });
+
+    await Effect.runPromise(
+      program.pipe(
+        Effect.provide(HistoryService.Default),
+        Effect.provide(BunContext.layer)
+      )
+    );
+  });
+
   test("clearHistory", async () => {
     const program = Effect.gen(function* () {
       const history = yield* HistoryService;

@@ -51,6 +51,18 @@ View history:
 btca history list
 ```
 
+Export history:
+
+```bash
+btca history export --format markdown --output history.md
+```
+
+Check health:
+
+```bash
+btca doctor
+```
+
 ## Config
 
 On first run, `btca` creates a default config at `~/.config/btca/btca.json`. That’s where the repo list + model/provider live.

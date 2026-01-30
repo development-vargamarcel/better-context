@@ -189,12 +189,13 @@ const ocService = Effect.gen(function* () {
   return {
     /**
      * Spawns the OpenCode TUI for the specified technology.
+     * @param args.tech The technology/repo name to chat about.
      */
     spawnTui: (args: { tech: string }) =>
       Effect.gen(function* () {
         const { tech } = args;
 
-        yield* Effect.log(`Spawning TUI for ${tech}...`);
+        yield* Effect.logDebug(`Spawning TUI for ${tech}...`);
         yield* config.cloneOrUpdateOneRepoLocally(tech);
 
         const configObject = yield* config.getOpenCodeConfig({
@@ -217,19 +218,21 @@ const ocService = Effect.gen(function* () {
           tech: "svelte",
         });
 
-        yield* Effect.log(`OPENCODE SERVER IS UP AT ${server.url}`);
+        yield* Effect.logInfo(`OPENCODE SERVER IS UP AT ${server.url}`);
 
         yield* Effect.sleep(Duration.days(1));
       }),
     /**
      * Asks a question about the specified technology.
      * Returns a stream of events.
+     * @param args.question The question to ask.
+     * @param args.tech The technology/repo to ask about.
      */
     askQuestion: (args: { question: string; tech: string }) =>
       Effect.gen(function* () {
         const { question, tech } = args;
 
-        yield* Effect.log(`Asking question about ${tech}...`);
+        yield* Effect.logDebug(`Asking question about ${tech}...`);
         yield* config.cloneOrUpdateOneRepoLocally(tech);
 
         const { client, server } = yield* getOpencodeInstance({ tech });

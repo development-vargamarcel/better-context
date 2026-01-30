@@ -106,6 +106,7 @@ const historyService = Effect.gen(function* () {
     /**
      * Adds a new entry to the history.
      * Trims history to the last 100 entries.
+     * @param entry The history entry to add.
      */
     addEntry: (entry: Omit<HistoryEntry, "id" | "timestamp">) =>
       Effect.gen(function* () {
@@ -123,11 +124,47 @@ const historyService = Effect.gen(function* () {
       }),
     /**
      * Retrieves the most recent history entries.
+     * @param limit The maximum number of entries to retrieve. Defaults to 10.
      */
     getEntries: (limit = 10) =>
       Effect.gen(function* () {
         const history = yield* loadHistory;
         return history.entries.slice(0, limit);
+      }),
+    /**
+     * Retrieves all history entries.
+     */
+    getAllEntries: () =>
+      Effect.gen(function* () {
+        const history = yield* loadHistory;
+        return history.entries;
+      }),
+    /**
+     * Exports the history to a file in the specified format.
+     * @param format The format to export to ("json" | "markdown").
+     * @param output The path to the output file.
+     */
+    exportHistory: (format: "json" | "markdown", output: string) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const history = yield* loadHistory;
+        let content = "";
+
+        if (format === "json") {
+          content = JSON.stringify(history.entries, null, 2);
+        } else {
+          content = "# BTCA History Export\n\n";
+          for (const entry of history.entries) {
+            const date = new Date(entry.timestamp).toLocaleString();
+            content += `## [${date}] Tech: ${entry.tech}\n\n`;
+            content += `**Question:** ${entry.question}\n\n`;
+            content += `**Answer:**\n\n\`\`\`\n${entry.answer}\n\`\`\`\n\n`;
+            content += "---\n\n";
+          }
+        }
+
+        yield* fs.writeFileString(output, content);
+        yield* Effect.logInfo(`History exported to ${output} in ${format} format`);
       }),
     /**
      * Clears all history entries.
