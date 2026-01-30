@@ -48,9 +48,11 @@ const loadHistory = Effect.gen(function* () {
   const exists = yield* fs.exists(historyPath);
 
   if (!exists) {
+    yield* Effect.logDebug("History file does not exist, using default");
     return DEFAULT_HISTORY;
   }
 
+  yield* Effect.logDebug(`Loading history from ${historyPath}`);
   const content = yield* fs.readFileString(historyPath).pipe(
     Effect.catchAll((error) =>
       Effect.fail(
@@ -84,6 +86,7 @@ const saveHistory = (history: History) =>
     const fs = yield* FileSystem.FileSystem;
     const historyPath = yield* getHistoryPath;
 
+    yield* Effect.logDebug(`Saving history to ${historyPath}`);
     yield* fs
       .writeFileString(historyPath, JSON.stringify(history, null, 2))
       .pipe(
@@ -115,6 +118,7 @@ const historyService = Effect.gen(function* () {
         // Keep only last 100 entries to avoid file growing too large
         const updatedEntries = [newEntry, ...history.entries].slice(0, 100);
         yield* saveHistory({ entries: updatedEntries });
+        yield* Effect.logDebug(`Added history entry: ${newEntry.id}`);
         return newEntry;
       }),
     /**
@@ -131,6 +135,7 @@ const historyService = Effect.gen(function* () {
     clearHistory: () =>
       Effect.gen(function* () {
         yield* saveHistory(DEFAULT_HISTORY);
+        yield* Effect.logInfo("History cleared");
       }),
   };
 });
