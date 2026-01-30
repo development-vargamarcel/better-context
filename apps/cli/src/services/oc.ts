@@ -44,9 +44,11 @@ const ocService = Effect.gen(function* () {
       const configObject = yield* config.getOpenCodeConfig({ repoName: tech });
 
       while (portOffset < maxInstances) {
+        const port = 3420 + portOffset;
+        yield* Effect.logDebug(`Attempting to start OpenCode on port ${port}`);
         const result = yield* Effect.tryPromise(() =>
           createOpencode({
-            port: 3420 + portOffset,
+            port,
             config: configObject,
           })
         ).pipe(
@@ -56,7 +58,9 @@ const ocService = Effect.gen(function* () {
               err.cause.stack?.includes("port")
             ) {
               portOffset++;
-              return Effect.succeed(null);
+              return Effect.logDebug(
+                `Port ${port} in use, trying next...`
+              ).pipe(Effect.as(null));
             }
             return Effect.fail(
               new OcError({
@@ -117,26 +121,29 @@ const ocService = Effect.gen(function* () {
     errorDeferred: Deferred.Deferred<never, OcError>;
     client: OpencodeClient;
   }) =>
-    Effect.promise(() =>
-      args.client.session.prompt({
-        path: { id: args.sessionID },
-        body: {
-          agent: "docs",
-          model: {
-            providerID: rawConfig.provider,
-            modelID: rawConfig.model,
+    Effect.gen(function* () {
+      yield* Effect.logDebug("Sending prompt to OpenCode...");
+      return yield* Effect.promise(() =>
+        args.client.session.prompt({
+          path: { id: args.sessionID },
+          body: {
+            agent: "docs",
+            model: {
+              providerID: rawConfig.provider,
+              modelID: rawConfig.model,
+            },
+            parts: [{ type: "text", text: args.text }],
           },
-          parts: [{ type: "text", text: args.text }],
-        },
-      })
-    ).pipe(
-      Effect.catchAll((err) =>
-        Deferred.fail(
-          args.errorDeferred,
-          new OcError({ message: String(err), cause: err })
+        })
+      ).pipe(
+        Effect.catchAll((err) =>
+          Deferred.fail(
+            args.errorDeferred,
+            new OcError({ message: String(err), cause: err })
+          )
         )
-      )
-    );
+      );
+    });
 
   const streamPrompt = (args: {
     sessionID: string;
@@ -232,6 +239,7 @@ const ocService = Effect.gen(function* () {
           rawConfig.provider,
           rawConfig.model
         );
+        yield* Effect.logDebug("Provider/Model validation passed");
 
         yield* Effect.log(`Creating OpenCode session...`);
         const session = yield* Effect.promise(() => client.session.create());

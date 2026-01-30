@@ -196,6 +196,7 @@ const onStartLoadConfig = Effect.gen(function* () {
       configPath,
     };
   } else {
+    yield* Effect.logDebug(`Loading config from ${configPath}`);
     const content = yield* fs.readFileString(configPath).pipe(
       Effect.catchAll((error) =>
         Effect.fail(
@@ -230,10 +231,14 @@ const onStartLoadConfig = Effect.gen(function* () {
 
 const configService = Effect.gen(function* () {
   const path = yield* Path.Path;
+  const fs = yield* FileSystem.FileSystem;
   const loadedConfig = yield* onStartLoadConfig;
 
   let { config, configPath } = loadedConfig;
 
+  /**
+   * Helper to find a repo by name in the current config.
+   */
   const getRepo = ({
     repoName,
     config,
@@ -258,6 +263,7 @@ const configService = Effect.gen(function* () {
      */
     cloneOrUpdateOneRepoLocally: (repoName: string) =>
       Effect.gen(function* () {
+        yield* Effect.logDebug(`Request to clone/update repo: ${repoName}`);
         const repo = yield* getRepo({ repoName, config });
         const repoDir = path.join(config.reposDirectory, repo.name);
         const branch = repo.branch ?? "main";
@@ -278,6 +284,9 @@ const configService = Effect.gen(function* () {
      */
     getOpenCodeConfig: (args: { repoName: string }) =>
       Effect.gen(function* () {
+        yield* Effect.logDebug(
+          `Generating OpenCode config for: ${args.repoName}`
+        );
         const repo = yield* getRepo({ repoName: args.repoName, config }).pipe(
           Effect.catchTag("ConfigError", () => Effect.succeed(undefined))
         );
@@ -301,6 +310,44 @@ const configService = Effect.gen(function* () {
         return { provider: config.provider, model: config.model };
       }),
     /**
+     * Removes a repository from the configuration.
+     */
+    removeRepo: (args: { name: string; deleteFiles: boolean }) =>
+      Effect.gen(function* () {
+        const repo = config.repos.find((r) => r.name === args.name);
+        if (!repo) {
+          return yield* Effect.fail(
+            new ConfigError({ message: `Repo "${args.name}" not found` })
+          );
+        }
+
+        if (args.deleteFiles) {
+          const repoDir = path.join(config.reposDirectory, repo.name);
+          const exists = yield* directoryExists(repoDir);
+          if (exists) {
+            yield* Effect.log(`Removing directory ${repoDir}...`);
+            yield* fs.remove(repoDir, { recursive: true }).pipe(
+              Effect.catchAll((error) =>
+                Effect.fail(
+                  new ConfigError({
+                    message: "Failed to remove directory",
+                    cause: error,
+                  })
+                )
+              )
+            );
+          }
+        }
+
+        config = {
+          ...config,
+          repos: config.repos.filter((r) => r.name !== args.name),
+        };
+        yield* writeConfig(config);
+        yield* Effect.logInfo(`Repo "${args.name}" removed`);
+        return repo;
+      }),
+    /**
      * Adds a new repository to the configuration.
      */
     addRepo: (repo: Repo) =>
@@ -313,6 +360,7 @@ const configService = Effect.gen(function* () {
         }
         config = { ...config, repos: [...config.repos, repo] };
         yield* writeConfig(config);
+        yield* Effect.logInfo(`Repo "${repo.name}" added`);
         return repo;
       }),
   };
