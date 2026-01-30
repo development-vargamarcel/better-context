@@ -5,6 +5,7 @@ import { Effect, Layer, Schema, Stream } from 'effect';
 import { OcService, type OcEvent } from './oc.ts';
 import { ConfigService } from './config.ts';
 import { HistoryService } from './history.ts';
+import { GeneralError } from '../lib/errors.ts';
 
 declare const __VERSION__: string;
 const VERSION: string = typeof __VERSION__ !== 'undefined' ? __VERSION__ : '0.0.0-dev';
@@ -202,6 +203,35 @@ const historyClearCommand = Command.make('clear', {}, () =>
 	}).pipe(Effect.provide(programLayer))
 );
 
+const historyOutputOption = Options.text('output').pipe(Options.withAlias('o'));
+const historyFormatOption = Options.text('format').pipe(
+	Options.withAlias('f'),
+	Options.withDefault('json')
+);
+
+const historyExportCommand = Command.make(
+	'export',
+	{ output: historyOutputOption, format: historyFormatOption },
+	({ output, format }) =>
+		Effect.gen(function* () {
+			if (format !== 'json' && format !== 'markdown') {
+				yield* Effect.fail(
+					new GeneralError({ message: 'Format must be "json" or "markdown"' })
+				);
+			}
+			const history = yield* HistoryService;
+			yield* history.exportHistory(format as 'json' | 'markdown', output);
+		}).pipe(
+			Effect.catchTag('GeneralError', (e) =>
+				Effect.sync(() => {
+					console.error(`Error: ${e.message}`);
+					process.exit(1);
+				})
+			),
+			Effect.provide(programLayer)
+		)
+);
+
 const historyCommand = Command.make('history', {}, () =>
 	Effect.sync(() => {
 		console.log('Usage: btca history <command>');
@@ -209,8 +239,15 @@ const historyCommand = Command.make('history', {}, () =>
 		console.log('Commands:');
 		console.log('  list    List recent history');
 		console.log('  clear   Clear history');
+		console.log('  export  Export history to a file');
 	})
-).pipe(Command.withSubcommands([historyListCommand, historyClearCommand]));
+).pipe(
+	Command.withSubcommands([
+		historyListCommand,
+		historyClearCommand,
+		historyExportCommand
+	])
+);
 
 // === Config Subcommands ===
 
@@ -377,6 +414,51 @@ const configCommand = Command.make('config', {}, () =>
 	}).pipe(Effect.provide(programLayer))
 ).pipe(Command.withSubcommands([configModelCommand, configReposCommand]));
 
+// === Doctor Command ===
+const doctorCommand = Command.make('doctor', {}, () =>
+	Effect.gen(function* () {
+		console.log('Running health checks...\n');
+
+		// 1. Bun Version
+		try {
+			const bunVersion = Bun.version;
+			console.log(`[OK] Bun version: ${bunVersion}`);
+		} catch (e) {
+			console.log(`[FAIL] Bun version check failed: ${e}`);
+		}
+
+		// 2. Git Version
+		try {
+			const proc = Bun.spawn(['git', '--version']);
+			const output = yield* Effect.tryPromise(() => new Response(proc.stdout).text());
+			console.log(`[OK] Git found: ${output.trim()}`);
+		} catch (e) {
+			console.log(`[FAIL] Git check failed: ${e}`);
+		}
+
+		// 3. Config & Permissions
+		const config = yield* ConfigService;
+		try {
+			const configPath = yield* config.getConfigPath();
+			yield* config.rawConfig();
+			console.log(`[OK] Config file loaded: ${configPath}`);
+
+			// Check write permissions
+			const dir = configPath.substring(0, configPath.lastIndexOf('/'));
+			// Using 'test -w' to check writability
+			const testProc = Bun.spawn(['test', '-w', dir]);
+			yield* Effect.tryPromise(() => testProc.exited);
+			if (testProc.exitCode === 0) {
+				console.log(`[OK] Config directory is writable: ${dir}`);
+			} else {
+				console.log(`[FAIL] Config directory is NOT writable: ${dir}`);
+			}
+		} catch (e) {
+			console.log(`[FAIL] Config check failed: ${e}`);
+		}
+	}).pipe(Effect.provide(programLayer))
+);
+
 // === Main Command ===
 const mainCommand = Command.make('btca', {}, () =>
 	Effect.sync(() => {
@@ -389,7 +471,8 @@ const mainCommand = Command.make('btca', {}, () =>
 		openCommand,
 		chatCommand,
 		configCommand,
-		historyCommand
+		historyCommand,
+		doctorCommand
 	])
 );
 

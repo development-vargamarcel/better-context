@@ -257,9 +257,13 @@ const configService = Effect.gen(function* () {
     });
 
   return {
+    /**
+     * Returns the path to the current configuration file.
+     */
     getConfigPath: () => Effect.succeed(configPath),
     /**
      * Clones or pulls the specified repository locally.
+     * @param repoName The name of the repository to clone or update.
      */
     cloneOrUpdateOneRepoLocally: (repoName: string) =>
       Effect.gen(function* () {
@@ -281,6 +285,7 @@ const configService = Effect.gen(function* () {
       }),
     /**
      * Generates the OpenCode configuration for the specified repository.
+     * @param args.repoName The name of the repository to generate config for.
      */
     getOpenCodeConfig: (args: { repoName: string }) =>
       Effect.gen(function* () {
@@ -296,24 +301,41 @@ const configService = Effect.gen(function* () {
           specialNotes: repo?.specialNotes,
         });
       }),
+    /**
+     * Returns the raw configuration object.
+     */
     rawConfig: () => Effect.succeed(config),
+    /**
+     * Returns the list of configured repositories.
+     */
     getRepos: () => Effect.succeed(config.repos),
+    /**
+     * Returns the current model and provider configuration.
+     */
     getModel: () =>
       Effect.succeed({ provider: config.provider, model: config.model }),
     /**
      * Updates the AI model and provider configuration.
+     * @param args.provider The provider ID.
+     * @param args.model The model ID.
      */
     updateModel: (args: { provider: string; model: string }) =>
       Effect.gen(function* () {
+        yield* Effect.logDebug(
+          `Updating model to ${args.provider}/${args.model}`
+        );
         config = { ...config, provider: args.provider, model: args.model };
         yield* writeConfig(config);
         return { provider: config.provider, model: config.model };
       }),
     /**
      * Removes a repository from the configuration.
+     * @param args.name The name of the repository to remove.
+     * @param args.deleteFiles Whether to delete the repository files from disk.
      */
     removeRepo: (args: { name: string; deleteFiles: boolean }) =>
       Effect.gen(function* () {
+        yield* Effect.logDebug(`Removing repo: ${args.name}`);
         const repo = config.repos.find((r) => r.name === args.name);
         if (!repo) {
           return yield* Effect.fail(
@@ -349,9 +371,11 @@ const configService = Effect.gen(function* () {
       }),
     /**
      * Adds a new repository to the configuration.
+     * @param repo The repository to add.
      */
     addRepo: (repo: Repo) =>
       Effect.gen(function* () {
+        yield* Effect.logDebug(`Adding repo: ${repo.name} (${repo.url})`);
         const existing = config.repos.find((r) => r.name === repo.name);
         if (existing) {
           return yield* Effect.fail(
