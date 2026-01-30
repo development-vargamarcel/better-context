@@ -150,6 +150,28 @@ Options:
 - `-b, --branch` - Branch to use (default: "main")
 - `--notes` - Special instructions for the AI when using this repo
 
+#### `btca config repos remove`
+
+Remove a repository from the configuration.
+
+```bash
+btca config repos remove -n <name> [-d]
+btca config repos remove --name react --delete-files
+```
+
+Options:
+
+- `-n, --name` - Name of the repo to remove (required)
+- `-d, --delete-files` - Delete the cloned repository directory from disk
+
+## Debugging
+
+To enable debug logging, set the `EFFECT_LOG_LEVEL` environment variable to `DEBUG` (or `INFO`, `WARN`, `ERROR`).
+
+```bash
+EFFECT_LOG_LEVEL=DEBUG btca ask -t svelte -q "How do stores work?"
+```
+
 ## Configuration
 
 Configuration is stored at `~/.config/btca/btca.json`. The config file includes:

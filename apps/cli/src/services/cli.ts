@@ -20,6 +20,9 @@ const askCommand = Command.make(
 	{ question: questionOption, tech: techOption },
 	({ question, tech }) =>
 		Effect.gen(function* () {
+			yield* Effect.logDebug(
+				`Command: ask, tech: ${tech}, question: ${question}`
+			);
 			const oc = yield* OcService;
 			const history = yield* HistoryService;
 			const eventStream = yield* oc.askQuestion({ tech, question });
@@ -86,6 +89,7 @@ const askCommand = Command.make(
 // === Open Subcommand ===
 const openCommand = Command.make('open', {}, () =>
 	Effect.gen(function* () {
+		yield* Effect.logDebug(`Command: open`);
 		const oc = yield* OcService;
 		yield* oc.holdOpenInstanceInBg();
 	}).pipe(Effect.provide(programLayer))
@@ -96,6 +100,7 @@ const chatTechOption = Options.text('tech').pipe(Options.withAlias('t'));
 
 const chatCommand = Command.make('chat', { tech: chatTechOption }, ({ tech }) =>
 	Effect.gen(function* () {
+		yield* Effect.logDebug(`Command: chat, tech: ${tech}`);
 		const oc = yield* OcService;
 		yield* oc.spawnTui({ tech });
 	}).pipe(Effect.provide(programLayer))
@@ -111,6 +116,7 @@ const portOption = Options.integer('port').pipe(Options.withAlias('p'), Options.
 
 const serveCommand = Command.make('serve', { port: portOption }, ({ port }) =>
 	Effect.gen(function* () {
+		yield* Effect.logDebug(`Command: serve, port: ${port}`);
 		const router = HttpRouter.empty.pipe(
 			HttpRouter.post(
 				'/question',
@@ -312,6 +318,31 @@ const configReposAddCommand = Command.make(
 		)
 );
 
+// config repos remove - remove a repo
+const deleteFilesOption = Options.boolean('delete-files').pipe(
+	Options.withAlias('d'),
+	Options.withDefault(false)
+);
+
+const configReposRemoveCommand = Command.make(
+	'remove',
+	{ name: repoNameOption, deleteFiles: deleteFilesOption },
+	({ name, deleteFiles }) =>
+		Effect.gen(function* () {
+			const config = yield* ConfigService;
+			yield* config.removeRepo({ name, deleteFiles });
+			console.log(`Removed repo "${name}".`);
+		}).pipe(
+			Effect.catchTag('ConfigError', (e) =>
+				Effect.sync(() => {
+					console.error(`Error: ${e.message}`);
+					process.exit(1);
+				})
+			),
+			Effect.provide(programLayer)
+		)
+);
+
 // config repos - parent command for repo subcommands
 const configReposCommand = Command.make('repos', {}, () =>
 	Effect.sync(() => {
@@ -320,8 +351,15 @@ const configReposCommand = Command.make('repos', {}, () =>
 		console.log('Commands:');
 		console.log('  list    List all configured repos');
 		console.log('  add     Add a new repo');
+		console.log('  remove  Remove a repo');
 	})
-).pipe(Command.withSubcommands([configReposListCommand, configReposAddCommand]));
+).pipe(
+	Command.withSubcommands([
+		configReposListCommand,
+		configReposAddCommand,
+		configReposRemoveCommand
+	])
+);
 
 // config - parent command
 const configCommand = Command.make('config', {}, () =>
