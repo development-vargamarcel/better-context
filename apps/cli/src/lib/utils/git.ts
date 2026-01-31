@@ -41,3 +41,21 @@ export const pullRepo = (args: { repoDir: string; branch: string }) =>
     catch: (error) =>
       new ConfigError({ message: "Failed to pull repo", cause: error }),
   });
+
+export const validateRepo = (url: string) =>
+  Effect.tryPromise({
+    try: async () => {
+      const proc = Bun.spawn(["git", "ls-remote", url], {
+        stdin: "ignore",
+        stdout: "ignore",
+        stderr: "ignore",
+        env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+      });
+      const exitCode = await proc.exited;
+      if (exitCode !== 0) {
+        throw new Error(`git ls-remote failed with exit code ${exitCode}`);
+      }
+    },
+    catch: (error) =>
+      new ConfigError({ message: "Failed to validate repo", cause: error }),
+  });

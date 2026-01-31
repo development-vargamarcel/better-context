@@ -51,6 +51,12 @@ View history:
 btca history list
 ```
 
+View history stats:
+
+```bash
+btca history stats
+```
+
 Export history:
 
 ```bash
@@ -72,3 +78,11 @@ btca update
 ## Config
 
 On first run, `btca` creates a default config at `~/.config/btca/btca.json`. That’s where the repo list + model/provider live.
+
+## Managing Repos
+
+Add a repo (validates URL automatically):
+
+```bash
+btca config repos add --name my-lib --url https://github.com/my/lib
+```

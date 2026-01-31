@@ -38,12 +38,21 @@ describe("ConfigService", () => {
   });
 
   test("addRepo and removeRepo", async () => {
+    // Init a dummy git repo
+    const repoPath = path.join(tmpDir, "dummy-repo");
+    await fs.mkdir(repoPath);
+    await Bun.spawn(["git", "init", "-b", "main", repoPath]).exited;
+    // Commit something so HEAD exists
+    await fs.writeFile(path.join(repoPath, "README.md"), "# Test");
+    await Bun.spawn(["git", "add", "."], { cwd: repoPath }).exited;
+    await Bun.spawn(["git", "commit", "-m", "Initial commit"], { cwd: repoPath }).exited;
+
     const program = Effect.gen(function* () {
       const configService = yield* ConfigService;
 
       const newRepo = {
         name: "test-repo",
-        url: "https://example.com",
+        url: repoPath,
         branch: "main"
       };
 
