@@ -195,6 +195,28 @@ const historyListCommand = Command.make('list', {}, () =>
 	}).pipe(Effect.provide(programLayer))
 );
 
+const historyStatsCommand = Command.make('stats', {}, () =>
+	Effect.gen(function* () {
+		const history = yield* HistoryService;
+		const stats = yield* history.getStats();
+
+		console.log('History Statistics:\n');
+		console.log(`Total Questions: ${stats.totalQuestions}`);
+		if (stats.lastActivity > 0) {
+			console.log(`Last Activity:   ${new Date(stats.lastActivity).toLocaleString()}`);
+		}
+		console.log('\nQuestions per Tech:');
+		if (Object.keys(stats.techCounts).length === 0) {
+			console.log('  None');
+		} else {
+			const sortedTechs = Object.entries(stats.techCounts).sort((a, b) => b[1] - a[1]);
+			for (const [tech, count] of sortedTechs) {
+				console.log(`  ${tech}: ${count}`);
+			}
+		}
+	}).pipe(Effect.provide(programLayer))
+);
+
 const historyClearCommand = Command.make('clear', {}, () =>
 	Effect.gen(function* () {
 		const history = yield* HistoryService;
@@ -238,12 +260,14 @@ const historyCommand = Command.make('history', {}, () =>
 		console.log('');
 		console.log('Commands:');
 		console.log('  list    List recent history');
+		console.log('  stats   Show history statistics');
 		console.log('  clear   Clear history');
 		console.log('  export  Export history to a file');
 	})
 ).pipe(
 	Command.withSubcommands([
 		historyListCommand,
+		historyStatsCommand,
 		historyClearCommand,
 		historyExportCommand
 	])

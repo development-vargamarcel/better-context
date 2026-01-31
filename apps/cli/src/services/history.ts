@@ -110,6 +110,7 @@ const historyService = Effect.gen(function* () {
      */
     addEntry: (entry: Omit<HistoryEntry, "id" | "timestamp">) =>
       Effect.gen(function* () {
+        yield* Effect.logDebug(`Adding history entry for tech: ${entry.tech}`);
         const history = yield* loadHistory;
         const newEntry: HistoryEntry = {
           ...entry,
@@ -128,6 +129,7 @@ const historyService = Effect.gen(function* () {
      */
     getEntries: (limit = 10) =>
       Effect.gen(function* () {
+        yield* Effect.logDebug(`Retrieving ${limit} history entries`);
         const history = yield* loadHistory;
         return history.entries.slice(0, limit);
       }),
@@ -136,6 +138,7 @@ const historyService = Effect.gen(function* () {
      */
     getAllEntries: () =>
       Effect.gen(function* () {
+        yield* Effect.logDebug("Retrieving all history entries");
         const history = yield* loadHistory;
         return history.entries;
       }),
@@ -146,6 +149,7 @@ const historyService = Effect.gen(function* () {
      */
     exportHistory: (format: "json" | "markdown", output: string) =>
       Effect.gen(function* () {
+        yield* Effect.logDebug(`Exporting history to ${output} in ${format} format`);
         const fs = yield* FileSystem.FileSystem;
         const history = yield* loadHistory;
         let content = "";
@@ -171,8 +175,33 @@ const historyService = Effect.gen(function* () {
      */
     clearHistory: () =>
       Effect.gen(function* () {
+        yield* Effect.logDebug("Clearing history");
         yield* saveHistory(DEFAULT_HISTORY);
         yield* Effect.logInfo("History cleared");
+      }),
+    /**
+     * Calculates statistics from the history.
+     */
+    getStats: () =>
+      Effect.gen(function* () {
+        yield* Effect.logDebug("Calculating history statistics");
+        const history = yield* loadHistory;
+        const totalQuestions = history.entries.length;
+        const techCounts: Record<string, number> = {};
+        let lastActivity = 0;
+
+        for (const entry of history.entries) {
+          techCounts[entry.tech] = (techCounts[entry.tech] || 0) + 1;
+          if (entry.timestamp > lastActivity) {
+            lastActivity = entry.timestamp;
+          }
+        }
+
+        return {
+          totalQuestions,
+          techCounts,
+          lastActivity,
+        };
       }),
   };
 });

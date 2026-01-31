@@ -37,6 +37,9 @@ const ocService = Effect.gen(function* () {
 
   const rawConfig = yield* config.rawConfig();
 
+  /**
+   * Attempts to create an OpenCode instance, trying multiple ports if necessary.
+   */
   const getOpencodeInstance = ({ tech }: { tech: string }) =>
     Effect.gen(function* () {
       let portOffset = 0;
@@ -82,6 +85,9 @@ const ocService = Effect.gen(function* () {
       );
     });
 
+  /**
+   * Subscribes to session events and filters them for the current session.
+   */
   const streamSessionEvents = (args: {
     sessionID: string;
     client: OpencodeClient;
@@ -115,6 +121,9 @@ const ocService = Effect.gen(function* () {
       );
     });
 
+  /**
+   * Sends a prompt to the OpenCode session.
+   */
   const firePrompt = (args: {
     sessionID: string;
     text: string;
@@ -145,6 +154,9 @@ const ocService = Effect.gen(function* () {
       );
     });
 
+  /**
+   * Streams the prompt response, handling errors and cleanup.
+   */
   const streamPrompt = (args: {
     sessionID: string;
     prompt: string;

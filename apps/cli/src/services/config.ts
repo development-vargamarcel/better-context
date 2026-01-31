@@ -3,7 +3,7 @@ import { FileSystem, Path } from "@effect/platform";
 import { Effect, Schema } from "effect";
 import { getDocsAgentPrompt } from "../lib/prompts.ts";
 import { ConfigError } from "../lib/errors.ts";
-import { cloneRepo, pullRepo } from "../lib/utils/git.ts";
+import { cloneRepo, pullRepo, validateRepo } from "../lib/utils/git.ts";
 import { directoryExists, expandHome } from "../lib/utils/files.ts";
 
 const CONFIG_DIRECTORY = "~/.config/btca";
@@ -384,6 +384,11 @@ const configService = Effect.gen(function* () {
             new ConfigError({ message: `Repo "${repo.name}" already exists` })
           );
         }
+
+        // Validate the repo URL
+        yield* Effect.logDebug(`Validating repo URL: ${repo.url}`);
+        yield* validateRepo(repo.url);
+
         config = { ...config, repos: [...config.repos, repo] };
         yield* writeConfig(config);
         yield* Effect.logInfo(`Repo "${repo.name}" added`);
