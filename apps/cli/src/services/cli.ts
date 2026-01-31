@@ -536,6 +536,46 @@ const doctorCommand = Command.make('doctor', {}, () =>
 	}).pipe(Effect.provide(programLayer))
 );
 
+// === Browse Subcommand ===
+const browseTechOption = Options.text('tech').pipe(Options.withAlias('t'));
+
+const browseCommand = Command.make('browse', { tech: browseTechOption }, ({ tech }) =>
+	Effect.gen(function* () {
+		yield* Effect.logDebug(`Command: browse, tech: ${tech}`);
+		const config = yield* ConfigService;
+		const repoPath = yield* config.getRepoPath(tech);
+
+		yield* Effect.logInfo(`Opening ${tech} at ${repoPath}...`);
+
+		// Determine command based on platform
+		let command: string[];
+		if (process.platform === 'darwin') {
+			command = ['open', repoPath];
+		} else if (process.platform === 'win32') {
+			command = ['explorer', repoPath];
+		} else {
+			// Linux and others
+			command = ['xdg-open', repoPath];
+		}
+
+		const proc = Bun.spawn(command, {
+			stderr: 'ignore',
+			stdout: 'ignore',
+			stdin: 'ignore'
+		});
+
+		proc.unref();
+	}).pipe(
+		Effect.catchTag('ConfigError', (e) =>
+			Effect.sync(() => {
+				console.error(`Error: ${e.message}`);
+				process.exit(1);
+			})
+		),
+		Effect.provide(programLayer)
+	)
+);
+
 // === Main Command ===
 const mainCommand = Command.make('btca', {}, () =>
 	Effect.sync(() => {
@@ -547,6 +587,7 @@ const mainCommand = Command.make('btca', {}, () =>
 		serveCommand,
 		openCommand,
 		chatCommand,
+		browseCommand,
 		configCommand,
 		historyCommand,
 		doctorCommand,

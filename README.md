@@ -27,6 +27,12 @@ Open the TUI:
 btca chat -t svelte
 ```
 
+Browse local repo:
+
+```bash
+btca browse -t svelte
+```
+
 Run as a server:
 
 ```bash
@@ -73,6 +79,14 @@ Update all repos:
 
 ```bash
 btca update
+```
+
+## Debugging
+
+To enable debug logs, set `EFFECT_LOG_LEVEL=DEBUG`:
+
+```bash
+EFFECT_LOG_LEVEL=DEBUG btca ...
 ```
 
 ## Config

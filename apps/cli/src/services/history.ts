@@ -197,6 +197,8 @@ const historyService = Effect.gen(function* () {
           }
         }
 
+        yield* Effect.logDebug(`Stats calculated: ${totalQuestions} questions`);
+
         return {
           totalQuestions,
           techCounts,

@@ -177,6 +177,8 @@ const ocService = Effect.gen(function* () {
         client,
       }).pipe(Effect.forkDaemon);
 
+      yield* Effect.logDebug("Stream prompt started");
+
       // Transform stream to fail on session.error, race with prompt error
       return eventStream.pipe(
         Stream.mapEffect((event) =>

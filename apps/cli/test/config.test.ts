@@ -37,6 +37,45 @@ describe("ConfigService", () => {
     );
   });
 
+  test("getRepoPath", async () => {
+    // Init a dummy git repo
+    const repoPath = path.join(tmpDir, "dummy-repo-2");
+    await fs.mkdir(repoPath);
+    await Bun.spawn(["git", "init", "-b", "main", repoPath]).exited;
+    await fs.writeFile(path.join(repoPath, "README.md"), "# Test");
+    await Bun.spawn(["git", "add", "."], { cwd: repoPath }).exited;
+    await Bun.spawn(["git", "commit", "-m", "Initial commit"], { cwd: repoPath }).exited;
+
+    const program = Effect.gen(function* () {
+      const configService = yield* ConfigService;
+
+      const newRepo = {
+        name: "test-repo-2",
+        url: repoPath,
+        branch: "main"
+      };
+
+      yield* configService.addRepo(newRepo);
+
+      const localPath = yield* configService.getRepoPath("test-repo-2");
+      const config = yield* configService.rawConfig();
+
+      const expectedPath = path.join(config.reposDirectory, "test-repo-2");
+      expect(localPath).toBe(expectedPath);
+
+      // Also check if directory exists
+      const stats = yield* Effect.tryPromise(() => fs.stat(localPath));
+      expect(stats.isDirectory()).toBe(true);
+    });
+
+    await Effect.runPromise(
+      program.pipe(
+        Effect.provide(ConfigService.Default),
+        Effect.provide(BunContext.layer)
+      )
+    );
+  });
+
   test("addRepo and removeRepo", async () => {
     // Init a dummy git repo
     const repoPath = path.join(tmpDir, "dummy-repo");
