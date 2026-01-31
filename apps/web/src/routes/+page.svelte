@@ -101,7 +101,8 @@ btca`;
 			<code class="rounded bg-neutral-900/5 px-1 py-0.5 text-xs dark:bg-white/10">history</code>,
 			<code class="rounded bg-neutral-900/5 px-1 py-0.5 text-xs dark:bg-white/10">chat</code>,
 			<code class="rounded bg-neutral-900/5 px-1 py-0.5 text-xs dark:bg-white/10">serve</code>,
-			<code class="rounded bg-neutral-900/5 px-1 py-0.5 text-xs dark:bg-white/10">open</code>.
+			<code class="rounded bg-neutral-900/5 px-1 py-0.5 text-xs dark:bg-white/10">open</code>,
+			<code class="rounded bg-neutral-900/5 px-1 py-0.5 text-xs dark:bg-white/10">update</code>.
 		</p>
 
 		<div class="mt-4 grid gap-4 md:grid-cols-2">
@@ -267,6 +268,7 @@ btca`;
 			<code class="rounded bg-neutral-900/5 px-1.5 py-1 text-xs dark:bg-white/10"
 				>~/.config/btca/btca.json</code
 			>. That’s where repo list + model/provider live.
+			You can reset it with <code class="rounded bg-neutral-900/5 px-1.5 py-1 text-xs dark:bg-white/10">btca config reset</code>.
 		</p>
 	</section>
 </section>

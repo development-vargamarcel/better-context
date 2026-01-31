@@ -164,6 +164,34 @@ Options:
 - `-n, --name` - Name of the repo to remove (required)
 - `-d, --delete-files` - Delete the cloned repository directory from disk
 
+#### `btca config reset`
+
+Resets the configuration to default values.
+
+```bash
+btca config reset
+```
+
+### `btca update`
+
+Updates (git pull) all configured repositories.
+
+```bash
+btca update
+```
+
+### `btca doctor`
+
+Checks the health of your environment, including:
+- Bun version
+- Git version and configuration (user.name/user.email)
+- OpenCode installation
+- Config file access
+
+```bash
+btca doctor
+```
+
 ## Debugging
 
 To enable debug logging, set the `EFFECT_LOG_LEVEL` environment variable to `DEBUG` (or `INFO`, `WARN`, `ERROR`).
