@@ -286,6 +286,16 @@ const configService = Effect.gen(function* () {
      */
     cloneOrUpdateOneRepoLocally,
     /**
+     * Gets the local file system path for a repository, ensuring it is cloned and updated.
+     * @param repoName The name of the repository.
+     */
+    getRepoPath: (repoName: string) =>
+      Effect.gen(function* () {
+        yield* Effect.logDebug(`Getting path for repo: ${repoName}`);
+        const repo = yield* cloneOrUpdateOneRepoLocally(repoName);
+        return path.join(config.reposDirectory, repo.name);
+      }),
+    /**
      * Generates the OpenCode configuration for the specified repository.
      * @param args.repoName The name of the repository to generate config for.
      */
