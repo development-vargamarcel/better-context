@@ -398,6 +398,14 @@ const configReposCommand = Command.make('repos', {}, () =>
 	])
 );
 
+const configResetCommand = Command.make('reset', {}, () =>
+	Effect.gen(function* () {
+		const config = yield* ConfigService;
+		yield* config.resetConfig();
+		console.log('Configuration reset to defaults.');
+	}).pipe(Effect.provide(programLayer))
+);
+
 // config - parent command
 const configCommand = Command.make('config', {}, () =>
 	Effect.gen(function* () {
@@ -411,8 +419,18 @@ const configCommand = Command.make('config', {}, () =>
 		console.log('Commands:');
 		console.log('  model   View or set the model and provider');
 		console.log('  repos   Manage configured repos');
+		console.log('  reset   Reset configuration to defaults');
 	}).pipe(Effect.provide(programLayer))
-).pipe(Command.withSubcommands([configModelCommand, configReposCommand]));
+).pipe(Command.withSubcommands([configModelCommand, configReposCommand, configResetCommand]));
+
+// === Update Subcommand ===
+const updateCommand = Command.make('update', {}, () =>
+	Effect.gen(function* () {
+		const config = yield* ConfigService;
+		yield* config.updateAllRepos();
+		console.log('All repositories updated.');
+	}).pipe(Effect.provide(programLayer))
+);
 
 // === Doctor Command ===
 const doctorCommand = Command.make('doctor', {}, () =>
@@ -436,7 +454,42 @@ const doctorCommand = Command.make('doctor', {}, () =>
 			console.log(`[FAIL] Git check failed: ${e}`);
 		}
 
-		// 3. Config & Permissions
+		// 3. Git Config
+		try {
+			const procName = Bun.spawn(['git', 'config', 'user.name']);
+			const nameOutput = yield* Effect.tryPromise(() => new Response(procName.stdout).text());
+			if (nameOutput.trim()) {
+				console.log(`[OK] Git user.name configured: ${nameOutput.trim()}`);
+			} else {
+				console.log('[WARN] Git user.name is NOT configured. Git operations might fail.');
+			}
+
+			const procEmail = Bun.spawn(['git', 'config', 'user.email']);
+			const emailOutput = yield* Effect.tryPromise(() => new Response(procEmail.stdout).text());
+			if (emailOutput.trim()) {
+				console.log(`[OK] Git user.email configured: ${emailOutput.trim()}`);
+			} else {
+				console.log('[WARN] Git user.email is NOT configured. Git operations might fail.');
+			}
+		} catch (e) {
+			console.log(`[FAIL] Git config check failed: ${e}`);
+		}
+
+		// 4. OpenCode Check
+		try {
+			const proc = Bun.spawn(['which', 'opencode']);
+			yield* Effect.tryPromise(() => proc.exited);
+			if (proc.exitCode === 0) {
+				const output = yield* Effect.tryPromise(() => new Response(proc.stdout).text());
+				console.log(`[OK] opencode found at: ${output.trim()}`);
+			} else {
+				console.log('[FAIL] opencode NOT found in PATH. Install it globally.');
+			}
+		} catch (e) {
+			console.log(`[FAIL] opencode check failed: ${e}`);
+		}
+
+		// 5. Config & Permissions
 		const config = yield* ConfigService;
 		try {
 			const configPath = yield* config.getConfigPath();
@@ -472,7 +525,8 @@ const mainCommand = Command.make('btca', {}, () =>
 		chatCommand,
 		configCommand,
 		historyCommand,
-		doctorCommand
+		doctorCommand,
+		updateCommand
 	])
 );
 

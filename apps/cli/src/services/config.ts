@@ -256,6 +256,25 @@ const configService = Effect.gen(function* () {
       return repo;
     });
 
+  const cloneOrUpdateOneRepoLocally = (repoName: string) =>
+    Effect.gen(function* () {
+      yield* Effect.logDebug(`Request to clone/update repo: ${repoName}`);
+      const repo = yield* getRepo({ repoName, config });
+      const repoDir = path.join(config.reposDirectory, repo.name);
+      const branch = repo.branch ?? "main";
+
+      const exists = yield* directoryExists(repoDir);
+      if (exists) {
+        yield* Effect.log(`Pulling latest changes for ${repo.name}...`);
+        yield* pullRepo({ repoDir, branch });
+      } else {
+        yield* Effect.log(`Cloning ${repo.name}...`);
+        yield* cloneRepo({ repoDir, url: repo.url, branch });
+      }
+      yield* Effect.log(`Done with ${repo.name}`);
+      return repo;
+    });
+
   return {
     /**
      * Returns the path to the current configuration file.
@@ -265,24 +284,7 @@ const configService = Effect.gen(function* () {
      * Clones or pulls the specified repository locally.
      * @param repoName The name of the repository to clone or update.
      */
-    cloneOrUpdateOneRepoLocally: (repoName: string) =>
-      Effect.gen(function* () {
-        yield* Effect.logDebug(`Request to clone/update repo: ${repoName}`);
-        const repo = yield* getRepo({ repoName, config });
-        const repoDir = path.join(config.reposDirectory, repo.name);
-        const branch = repo.branch ?? "main";
-
-        const exists = yield* directoryExists(repoDir);
-        if (exists) {
-          yield* Effect.log(`Pulling latest changes for ${repo.name}...`);
-          yield* pullRepo({ repoDir, branch });
-        } else {
-          yield* Effect.log(`Cloning ${repo.name}...`);
-          yield* cloneRepo({ repoDir, url: repo.url, branch });
-        }
-        yield* Effect.log(`Done with ${repo.name}`);
-        return repo;
-      }),
+    cloneOrUpdateOneRepoLocally,
     /**
      * Generates the OpenCode configuration for the specified repository.
      * @param args.repoName The name of the repository to generate config for.
@@ -386,6 +388,42 @@ const configService = Effect.gen(function* () {
         yield* writeConfig(config);
         yield* Effect.logInfo(`Repo "${repo.name}" added`);
         return repo;
+      }),
+    /**
+     * Resets the configuration to the default values.
+     */
+    resetConfig: () =>
+      Effect.gen(function* () {
+        yield* Effect.logDebug("Resetting config to defaults...");
+
+        const promptsDir = yield* expandHome(DEFAULT_CONFIG.promptsDirectory);
+        const reposDir = yield* expandHome(DEFAULT_CONFIG.reposDirectory);
+
+        config = {
+          ...DEFAULT_CONFIG,
+          promptsDirectory: promptsDir,
+          reposDirectory: reposDir,
+        };
+
+        yield* writeConfig(config);
+        yield* Effect.logInfo("Configuration reset to defaults.");
+        return config;
+      }),
+    /**
+     * Updates all configured repositories.
+     */
+    updateAllRepos: () =>
+      Effect.gen(function* () {
+        yield* Effect.logDebug("Updating all configured repositories...");
+        const repos = config.repos;
+        if (repos.length === 0) {
+          yield* Effect.logInfo("No repositories configured.");
+          return;
+        }
+
+        for (const repo of repos) {
+          yield* cloneOrUpdateOneRepoLocally(repo.name);
+        }
       }),
   };
 });
