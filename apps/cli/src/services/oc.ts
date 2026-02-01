@@ -95,6 +95,7 @@ const ocService = Effect.gen(function* () {
     Effect.gen(function* () {
       const { sessionID, client } = args;
 
+      yield* Effect.logDebug(`Subscribing to events for session ${sessionID}`);
       const events = yield* Effect.tryPromise({
         try: () => client.event.subscribe(),
         catch: (err) =>
@@ -258,10 +259,11 @@ const ocService = Effect.gen(function* () {
         );
         yield* Effect.logDebug("Provider/Model validation passed");
 
-        yield* Effect.log(`Creating OpenCode session...`);
+        yield* Effect.logInfo(`Creating OpenCode session...`);
         const session = yield* Effect.promise(() => client.session.create());
 
         if (session.error) {
+          yield* Effect.logError(`Failed to create session: ${JSON.stringify(session.error)}`);
           return yield* Effect.fail(
             new OcError({
               message: "FAILED TO START OPENCODE SESSION",
@@ -271,7 +273,7 @@ const ocService = Effect.gen(function* () {
         }
 
         const sessionID = session.data.id;
-        yield* Effect.log(`Session created with ID ${sessionID}`);
+        yield* Effect.logInfo(`Session created with ID ${sessionID}`);
 
         return yield* streamPrompt({
           sessionID,

@@ -33,6 +33,12 @@ Browse local repo:
 btca browse -t svelte
 ```
 
+Search local repo:
+
+```bash
+btca search -t svelte -q "writable"
+```
+
 Run as a server:
 
 ```bash

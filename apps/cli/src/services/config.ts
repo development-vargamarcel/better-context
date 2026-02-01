@@ -82,6 +82,7 @@ const writeConfig = (config: Config) =>
       reposDirectory: collapseHome(config.reposDirectory),
     };
 
+    yield* Effect.logDebug(`Writing config to ${configPath}`);
     yield* fs
       .writeFileString(configPath, JSON.stringify(configToWrite, null, 2))
       .pipe(
@@ -250,7 +251,9 @@ const configService = Effect.gen(function* () {
       const repo = config.repos.find((repo) => repo.name === repoName);
       if (!repo) {
         return yield* Effect.fail(
-          new ConfigError({ message: "Repo not found" })
+          new ConfigError({
+            message: `Repo "${repoName}" not found. Run "btca config repos list" to see available repos.`,
+          })
         );
       }
       return repo;
@@ -265,13 +268,15 @@ const configService = Effect.gen(function* () {
 
       const exists = yield* directoryExists(repoDir);
       if (exists) {
-        yield* Effect.log(`Pulling latest changes for ${repo.name}...`);
+        yield* Effect.logInfo(`Pulling latest changes for ${repo.name}...`);
         yield* pullRepo({ repoDir, branch });
+        yield* Effect.logDebug(`Successfully pulled ${repo.name}`);
       } else {
-        yield* Effect.log(`Cloning ${repo.name}...`);
+        yield* Effect.logInfo(`Cloning ${repo.name}...`);
         yield* cloneRepo({ repoDir, url: repo.url, branch });
+        yield* Effect.logDebug(`Successfully cloned ${repo.name}`);
       }
-      yield* Effect.log(`Done with ${repo.name}`);
+      yield* Effect.logInfo(`Done with ${repo.name}`);
       return repo;
     });
 

@@ -53,6 +53,32 @@ Options:
 
 - `-t, --tech` - The technology/repo to chat about
 
+### `btca browse`
+
+Open the local repository directory in your system's file explorer.
+
+```bash
+btca browse -t <tech>
+```
+
+Options:
+
+- `-t, --tech` - The technology/repo to browse
+
+### `btca search`
+
+Search for code in the local repository.
+
+```bash
+btca search -t <tech> -q <query>
+btca search --tech svelte --query "writable"
+```
+
+Options:
+
+- `-t, --tech` - The technology/repo to search
+- `-q, --query` - The string or pattern to search for
+
 ### `btca serve`
 
 Start an HTTP server to answer questions via API.
