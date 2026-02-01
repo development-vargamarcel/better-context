@@ -10,10 +10,15 @@ import { ConfigService } from "./config.ts";
 import { OcError } from "../lib/errors.ts";
 import { validateProviderAndModel } from "../lib/utils/validation.ts";
 
+/**
+ * Spawns the OpenCode TUI process with the given configuration.
+ */
 const spawnOpencodeTui = async (args: {
   config: OpenCodeConfig;
   rawConfig: { provider: string; model: string };
 }) => {
+  // We can't use Effect.logDebug here easily because it's an async function, not an Effect
+  // But since this is a helper called from an Effect, we rely on the caller logging.
   const proc = spawn(
     ["opencode", `--model=${args.rawConfig.provider}/${args.rawConfig.model}`],
     {

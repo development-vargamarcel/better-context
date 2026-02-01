@@ -29,6 +29,9 @@ const configSchema = Schema.Struct({
 type Config = typeof configSchema.Type;
 type Repo = typeof repoSchema.Type;
 
+/**
+ * Default configuration values.
+ */
 const DEFAULT_CONFIG: Config = {
   promptsDirectory: `${CONFIG_DIRECTORY}/prompts`,
   reposDirectory: `${CONFIG_DIRECTORY}/repos`,
@@ -59,6 +62,9 @@ const DEFAULT_CONFIG: Config = {
   provider: "opencode",
 };
 
+/**
+ * Collapses a path starting with the home directory to use tilde (~).
+ */
 const collapseHome = (path: string): string => {
   const home = process.env.HOME ?? process.env.USERPROFILE ?? "";
   if (home && path.startsWith(home)) {
@@ -67,6 +73,9 @@ const collapseHome = (path: string): string => {
   return path;
 };
 
+/**
+ * Writes the configuration to disk.
+ */
 const writeConfig = (config: Config) =>
   Effect.gen(function* () {
     const path = yield* Path.Path;
@@ -248,6 +257,7 @@ const configService = Effect.gen(function* () {
     config: Config;
   }) =>
     Effect.gen(function* () {
+      yield* Effect.logDebug(`Looking up repo: ${repoName}`);
       const repo = config.repos.find((repo) => repo.name === repoName);
       if (!repo) {
         return yield* Effect.fail(
@@ -321,16 +331,22 @@ const configService = Effect.gen(function* () {
     /**
      * Returns the raw configuration object.
      */
-    rawConfig: () => Effect.succeed(config),
+    rawConfig: () =>
+      Effect.logDebug("Retrieving raw config").pipe(Effect.as(config)),
     /**
      * Returns the list of configured repositories.
      */
-    getRepos: () => Effect.succeed(config.repos),
+    getRepos: () =>
+      Effect.logDebug("Retrieving configured repos").pipe(
+        Effect.as(config.repos)
+      ),
     /**
      * Returns the current model and provider configuration.
      */
     getModel: () =>
-      Effect.succeed({ provider: config.provider, model: config.model }),
+      Effect.logDebug("Retrieving model configuration").pipe(
+        Effect.as({ provider: config.provider, model: config.model })
+      ),
     /**
      * Updates the AI model and provider configuration.
      * @param args.provider The provider ID.

@@ -65,6 +65,18 @@ Options:
 
 - `-t, --tech` - The technology/repo to browse
 
+### `btca web`
+
+Open the remote repository URL in your default browser.
+
+```bash
+btca web -t <tech>
+```
+
+Options:
+
+- `-t, --tech` - The technology/repo to view
+
 ### `btca search`
 
 Search for code in the local repository.
@@ -78,6 +90,18 @@ Options:
 
 - `-t, --tech` - The technology/repo to search
 - `-q, --query` - The string or pattern to search for
+
+### `btca info`
+
+Show information about a configured repository, including local path and latest commit details.
+
+```bash
+btca info -t <tech>
+```
+
+Options:
+
+- `-t, --tech` - The technology/repo to show info for
 
 ### `btca serve`
 

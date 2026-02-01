@@ -17,6 +17,9 @@ const programLayer = Layer.mergeAll(OcService.Default, ConfigService.Default, Hi
 const questionOption = Options.text('question').pipe(Options.withAlias('q'));
 const techOption = Options.text('tech').pipe(Options.withAlias('t'), Options.optional);
 
+/**
+ * Command to ask a question about a technology.
+ */
 const askCommand = Command.make(
 	'ask',
 	{ question: questionOption, tech: techOption },
@@ -95,6 +98,9 @@ const askCommand = Command.make(
 );
 
 // === Open Subcommand ===
+/**
+ * Command to hold an OpenCode instance open in the background.
+ */
 const openCommand = Command.make('open', {}, () =>
 	Effect.gen(function* () {
 		yield* Effect.logDebug(`Command: open`);
@@ -106,12 +112,66 @@ const openCommand = Command.make('open', {}, () =>
 // === Chat Subcommand ===
 const chatTechOption = Options.text('tech').pipe(Options.withAlias('t'), Options.optional);
 
+/**
+ * Command to start an interactive TUI chat session.
+ */
 const chatCommand = Command.make('chat', { tech: chatTechOption }, ({ tech }) =>
 	Effect.gen(function* () {
 		const selectedTech = yield* selectRepo(tech);
 		yield* Effect.logDebug(`Command: chat, tech: ${selectedTech}`);
 		const oc = yield* OcService;
 		yield* oc.spawnTui({ tech: selectedTech });
+	}).pipe(
+		Effect.catchTag('ConfigError', (e) =>
+			Effect.sync(() => {
+				console.error(`Error: ${e.message}`);
+				process.exit(1);
+			})
+		),
+		Effect.provide(programLayer)
+	)
+);
+
+// === Web Subcommand ===
+const webTechOption = Options.text('tech').pipe(Options.withAlias('t'), Options.optional);
+
+/**
+ * Command to open the repository URL in a web browser.
+ */
+const webCommand = Command.make('web', { tech: webTechOption }, ({ tech }) =>
+	Effect.gen(function* () {
+		const selectedTech = yield* selectRepo(tech);
+		yield* Effect.logDebug(`Command: web, tech: ${selectedTech}`);
+		const config = yield* ConfigService;
+
+		const repos = yield* config.getRepos();
+		const repo = repos.find(r => r.name === selectedTech);
+
+		if (!repo) {
+			console.error(`Error: Repo "${selectedTech}" not found.`);
+			process.exit(1);
+		}
+
+		yield* Effect.logInfo(`Opening ${repo.url}...`);
+
+		// Determine command based on platform
+		let command: string[];
+		if (process.platform === 'darwin') {
+			command = ['open', repo.url];
+		} else if (process.platform === 'win32') {
+			command = ['explorer', repo.url];
+		} else {
+			// Linux and others
+			command = ['xdg-open', repo.url];
+		}
+
+		const proc = Bun.spawn(command, {
+			stderr: 'ignore',
+			stdout: 'ignore',
+			stdin: 'ignore'
+		});
+
+		proc.unref();
 	}).pipe(
 		Effect.catchTag('ConfigError', (e) =>
 			Effect.sync(() => {
@@ -131,6 +191,9 @@ const QuestionRequest = Schema.Struct({
 
 const portOption = Options.integer('port').pipe(Options.withAlias('p'), Options.withDefault(8080));
 
+/**
+ * Command to start an HTTP server for answering questions.
+ */
 const serveCommand = Command.make('serve', { port: portOption }, ({ port }) =>
 	Effect.gen(function* () {
 		yield* Effect.logDebug(`Command: serve, port: ${port}`);
@@ -555,6 +618,9 @@ const doctorCommand = Command.make('doctor', {}, () =>
 // === Browse Subcommand ===
 const browseTechOption = Options.text('tech').pipe(Options.withAlias('t'), Options.optional);
 
+/**
+ * Command to open the local repository directory in the file explorer.
+ */
 const browseCommand = Command.make('browse', { tech: browseTechOption }, ({ tech }) =>
 	Effect.gen(function* () {
 		const selectedTech = yield* selectRepo(tech);
@@ -597,6 +663,9 @@ const browseCommand = Command.make('browse', { tech: browseTechOption }, ({ tech
 const searchTechOption = Options.text('tech').pipe(Options.withAlias('t'), Options.optional);
 const searchQueryOption = Options.text('query').pipe(Options.withAlias('q'));
 
+/**
+ * Command to search for code in the local repository.
+ */
 const searchCommand = Command.make(
 	'search',
 	{ tech: searchTechOption, query: searchQueryOption },
@@ -655,6 +724,9 @@ const searchCommand = Command.make(
 // === Info Subcommand ===
 const infoTechOption = Options.text('tech').pipe(Options.withAlias('t'), Options.optional);
 
+/**
+ * Command to show information about a repository.
+ */
 const infoCommand = Command.make('info', { tech: infoTechOption }, ({ tech }) =>
 	Effect.gen(function* () {
 		const selectedTech = yield* selectRepo(tech);
@@ -732,6 +804,7 @@ const mainCommand = Command.make('btca', {}, () =>
 		openCommand,
 		chatCommand,
 		browseCommand,
+		webCommand,
 		searchCommand,
 		infoCommand,
 		configCommand,
