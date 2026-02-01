@@ -576,6 +576,64 @@ const browseCommand = Command.make('browse', { tech: browseTechOption }, ({ tech
 	)
 );
 
+// === Search Subcommand ===
+const searchTechOption = Options.text('tech').pipe(Options.withAlias('t'));
+const searchQueryOption = Options.text('query').pipe(Options.withAlias('q'));
+
+const searchCommand = Command.make(
+	'search',
+	{ tech: searchTechOption, query: searchQueryOption },
+	({ tech, query }) =>
+		Effect.gen(function* () {
+			yield* Effect.logDebug(`Command: search, tech: ${tech}, query: ${query}`);
+			const config = yield* ConfigService;
+			const repoPath = yield* config.getRepoPath(tech);
+
+			yield* Effect.logInfo(`Searching in ${tech} at ${repoPath}...`);
+
+			// Use grep to search recursively
+			// -r: recursive
+			// -n: line number
+			// -C 2: context of 2 lines
+			// -I: ignore binary files
+			// --color=always: force color output
+			const proc = Bun.spawn(
+				['grep', '-r', '-n', '-C', '2', '-I', '--color=always', query, '.'],
+				{
+					cwd: repoPath,
+					stdout: 'pipe',
+					stderr: 'pipe'
+				}
+			);
+
+			const output = yield* Effect.tryPromise(() => new Response(proc.stdout).text());
+			const error = yield* Effect.tryPromise(() => new Response(proc.stderr).text());
+
+			yield* Effect.tryPromise(() => proc.exited);
+
+			if (proc.exitCode !== 0 && proc.exitCode !== 1) {
+				// grep returns 1 if no matches found
+				console.error(`Search failed: ${error}`);
+				return;
+			}
+
+			if (!output.trim()) {
+				console.log('No matches found.');
+				return;
+			}
+
+			console.log(output);
+		}).pipe(
+			Effect.catchTag('ConfigError', (e) =>
+				Effect.sync(() => {
+					console.error(`Error: ${e.message}`);
+					process.exit(1);
+				})
+			),
+			Effect.provide(programLayer)
+		)
+);
+
 // === Main Command ===
 const mainCommand = Command.make('btca', {}, () =>
 	Effect.sync(() => {
@@ -588,6 +646,7 @@ const mainCommand = Command.make('btca', {}, () =>
 		openCommand,
 		chatCommand,
 		browseCommand,
+		searchCommand,
 		configCommand,
 		historyCommand,
 		doctorCommand,
