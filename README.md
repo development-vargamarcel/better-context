@@ -15,28 +15,44 @@ btca --help
 
 ## Quick commands
 
-Ask a question:
+Ask a question (interactive repo selection if `-t` is omitted):
 
 ```bash
+btca ask -q "How do stores work in Svelte 5?"
+# or specify tech
 btca ask -t svelte -q "How do stores work in Svelte 5?"
 ```
 
 Open the TUI:
 
 ```bash
+btca chat
+# or
 btca chat -t svelte
 ```
 
 Browse local repo:
 
 ```bash
+btca browse
+# or
 btca browse -t svelte
 ```
 
 Search local repo:
 
 ```bash
+btca search -q "writable"
+# or
 btca search -t svelte -q "writable"
+```
+
+Get repo info:
+
+```bash
+btca info
+# or
+btca info -t svelte
 ```
 
 Run as a server:
