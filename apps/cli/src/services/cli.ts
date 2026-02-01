@@ -6,6 +6,7 @@ import { OcService, type OcEvent } from './oc.ts';
 import { ConfigService } from './config.ts';
 import { HistoryService } from './history.ts';
 import { GeneralError } from '../lib/errors.ts';
+import { selectRepo } from '../lib/ui.ts';
 
 declare const __VERSION__: string;
 const VERSION: string = typeof __VERSION__ !== 'undefined' ? __VERSION__ : '0.0.0-dev';
@@ -14,19 +15,20 @@ const programLayer = Layer.mergeAll(OcService.Default, ConfigService.Default, Hi
 
 // === Ask Subcommand ===
 const questionOption = Options.text('question').pipe(Options.withAlias('q'));
-const techOption = Options.text('tech').pipe(Options.withAlias('t'));
+const techOption = Options.text('tech').pipe(Options.withAlias('t'), Options.optional);
 
 const askCommand = Command.make(
 	'ask',
 	{ question: questionOption, tech: techOption },
 	({ question, tech }) =>
 		Effect.gen(function* () {
+			const selectedTech = yield* selectRepo(tech);
 			yield* Effect.logDebug(
-				`Command: ask, tech: ${tech}, question: ${question}`
+				`Command: ask, tech: ${selectedTech}, question: ${question}`
 			);
 			const oc = yield* OcService;
 			const history = yield* HistoryService;
-			const eventStream = yield* oc.askQuestion({ tech, question });
+			const eventStream = yield* oc.askQuestion({ tech: selectedTech, question });
 
 			let currentMessageId: string | null = null;
 			let fullAnswer = '';
@@ -57,12 +59,17 @@ const askCommand = Command.make(
 			);
 
 			if (fullAnswer.trim()) {
-				yield* history.addEntry({ tech, question, answer: fullAnswer.trim() });
+				yield* history.addEntry({ tech: selectedTech, question, answer: fullAnswer.trim() });
 			}
 
 			console.log('\n');
 		}).pipe(
 			Effect.catchTags({
+				ConfigError: (e) =>
+					Effect.sync(() => {
+						console.error(`Error: ${e.message}`);
+						process.exit(1);
+					}),
 				InvalidProviderError: (e) =>
 					Effect.sync(() => {
 						console.error(`Error: Unknown provider "${e.providerId}"`);
@@ -97,14 +104,23 @@ const openCommand = Command.make('open', {}, () =>
 );
 
 // === Chat Subcommand ===
-const chatTechOption = Options.text('tech').pipe(Options.withAlias('t'));
+const chatTechOption = Options.text('tech').pipe(Options.withAlias('t'), Options.optional);
 
 const chatCommand = Command.make('chat', { tech: chatTechOption }, ({ tech }) =>
 	Effect.gen(function* () {
-		yield* Effect.logDebug(`Command: chat, tech: ${tech}`);
+		const selectedTech = yield* selectRepo(tech);
+		yield* Effect.logDebug(`Command: chat, tech: ${selectedTech}`);
 		const oc = yield* OcService;
-		yield* oc.spawnTui({ tech });
-	}).pipe(Effect.provide(programLayer))
+		yield* oc.spawnTui({ tech: selectedTech });
+	}).pipe(
+		Effect.catchTag('ConfigError', (e) =>
+			Effect.sync(() => {
+				console.error(`Error: ${e.message}`);
+				process.exit(1);
+			})
+		),
+		Effect.provide(programLayer)
+	)
 );
 
 // === Serve Subcommand ===
@@ -537,15 +553,16 @@ const doctorCommand = Command.make('doctor', {}, () =>
 );
 
 // === Browse Subcommand ===
-const browseTechOption = Options.text('tech').pipe(Options.withAlias('t'));
+const browseTechOption = Options.text('tech').pipe(Options.withAlias('t'), Options.optional);
 
 const browseCommand = Command.make('browse', { tech: browseTechOption }, ({ tech }) =>
 	Effect.gen(function* () {
-		yield* Effect.logDebug(`Command: browse, tech: ${tech}`);
+		const selectedTech = yield* selectRepo(tech);
+		yield* Effect.logDebug(`Command: browse, tech: ${selectedTech}`);
 		const config = yield* ConfigService;
-		const repoPath = yield* config.getRepoPath(tech);
+		const repoPath = yield* config.getRepoPath(selectedTech);
 
-		yield* Effect.logInfo(`Opening ${tech} at ${repoPath}...`);
+		yield* Effect.logInfo(`Opening ${selectedTech} at ${repoPath}...`);
 
 		// Determine command based on platform
 		let command: string[];
@@ -577,7 +594,7 @@ const browseCommand = Command.make('browse', { tech: browseTechOption }, ({ tech
 );
 
 // === Search Subcommand ===
-const searchTechOption = Options.text('tech').pipe(Options.withAlias('t'));
+const searchTechOption = Options.text('tech').pipe(Options.withAlias('t'), Options.optional);
 const searchQueryOption = Options.text('query').pipe(Options.withAlias('q'));
 
 const searchCommand = Command.make(
@@ -585,11 +602,12 @@ const searchCommand = Command.make(
 	{ tech: searchTechOption, query: searchQueryOption },
 	({ tech, query }) =>
 		Effect.gen(function* () {
-			yield* Effect.logDebug(`Command: search, tech: ${tech}, query: ${query}`);
+			const selectedTech = yield* selectRepo(tech);
+			yield* Effect.logDebug(`Command: search, tech: ${selectedTech}, query: ${query}`);
 			const config = yield* ConfigService;
-			const repoPath = yield* config.getRepoPath(tech);
+			const repoPath = yield* config.getRepoPath(selectedTech);
 
-			yield* Effect.logInfo(`Searching in ${tech} at ${repoPath}...`);
+			yield* Effect.logInfo(`Searching in ${selectedTech} at ${repoPath}...`);
 
 			// Use grep to search recursively
 			// -r: recursive
@@ -634,6 +652,74 @@ const searchCommand = Command.make(
 		)
 );
 
+// === Info Subcommand ===
+const infoTechOption = Options.text('tech').pipe(Options.withAlias('t'), Options.optional);
+
+const infoCommand = Command.make('info', { tech: infoTechOption }, ({ tech }) =>
+	Effect.gen(function* () {
+		const selectedTech = yield* selectRepo(tech);
+		yield* Effect.logDebug(`Command: info, tech: ${selectedTech}`);
+		const config = yield* ConfigService;
+		const repoPath = yield* config.getRepoPath(selectedTech);
+
+		const repos = yield* config.getRepos();
+		const repoConfig = repos.find((r) => r.name === selectedTech);
+
+		console.log(`Repository: ${selectedTech}`);
+		if (repoConfig) {
+			console.log(`URL: ${repoConfig.url}`);
+			console.log(`Branch: ${repoConfig.branch}`);
+		}
+		console.log(`Local Path: ${repoPath}`);
+
+		yield* Effect.logDebug(`Fetching git info for ${selectedTech}...`);
+
+		// Git Log
+		const procLog = Bun.spawn(['git', 'log', '-1', '--format=%H%n%an%n%ad%n%s'], {
+			cwd: repoPath,
+			stdout: 'pipe',
+			stderr: 'pipe'
+		});
+
+		const logOutput = yield* Effect.tryPromise(() => new Response(procLog.stdout).text());
+		yield* Effect.tryPromise(() => procLog.exited);
+
+		if (procLog.exitCode === 0) {
+			const lines = logOutput.trim().split('\n');
+			if (lines.length >= 4) {
+				console.log(`Latest Commit: ${lines[0]}`);
+				console.log(`Author: ${lines[1]}`);
+				console.log(`Date: ${lines[2]}`);
+				console.log(`Message: ${lines[3]}`);
+			}
+		} else {
+			console.log('Git info unavailable.');
+		}
+
+		// File Count
+		const procCount = Bun.spawn(['git', 'ls-files'], {
+			cwd: repoPath,
+			stdout: 'pipe',
+			stderr: 'pipe'
+		});
+		const countOutput = yield* Effect.tryPromise(() => new Response(procCount.stdout).text());
+		yield* Effect.tryPromise(() => procCount.exited);
+
+		if (procCount.exitCode === 0) {
+			const count = countOutput.trim().split('\n').filter((l) => l).length;
+			console.log(`File Count: ${count}`);
+		}
+	}).pipe(
+		Effect.catchTag('ConfigError', (e) =>
+			Effect.sync(() => {
+				console.error(`Error: ${e.message}`);
+				process.exit(1);
+			})
+		),
+		Effect.provide(programLayer)
+	)
+);
+
 // === Main Command ===
 const mainCommand = Command.make('btca', {}, () =>
 	Effect.sync(() => {
@@ -647,6 +733,7 @@ const mainCommand = Command.make('btca', {}, () =>
 		chatCommand,
 		browseCommand,
 		searchCommand,
+		infoCommand,
 		configCommand,
 		historyCommand,
 		doctorCommand,
