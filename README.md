@@ -130,3 +130,17 @@ Add a repo (validates URL automatically):
 ```bash
 btca config repos add --name my-lib --url https://github.com/my/lib
 ```
+
+## Backup & Restore
+
+Export configuration to a file:
+
+```bash
+btca config export --path backup.json
+```
+
+Import configuration from a file:
+
+```bash
+btca config import --path backup.json
+```

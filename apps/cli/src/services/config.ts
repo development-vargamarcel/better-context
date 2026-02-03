@@ -492,6 +492,102 @@ const configService = Effect.gen(function* () {
         }
       }),
     /**
+     * Exports the current configuration to a file.
+     * @param outputPath The path to export the configuration to.
+     */
+    exportConfig: (outputPath: string) =>
+      Effect.gen(function* () {
+        yield* Effect.logDebug(`Exporting config to ${outputPath}`);
+        const fs = yield* FileSystem.FileSystem;
+
+        // Collapse expanded paths back to tilde for storage
+        const configToWrite: Config = {
+          ...config,
+          promptsDirectory: collapseHome(config.promptsDirectory),
+          reposDirectory: collapseHome(config.reposDirectory),
+        };
+
+        yield* fs
+          .writeFileString(outputPath, JSON.stringify(configToWrite, null, 2))
+          .pipe(
+            Effect.catchAll((error) =>
+              Effect.fail(
+                new ConfigError({
+                  message: "Failed to export config",
+                  cause: error,
+                })
+              )
+            )
+          );
+        yield* Effect.logInfo(`Configuration exported to ${outputPath}`);
+      }),
+
+    /**
+     * Imports a configuration from a file.
+     * @param inputPath The path to import the configuration from.
+     */
+    importConfig: (inputPath: string) =>
+      Effect.gen(function* () {
+        yield* Effect.logDebug(`Importing config from ${inputPath}`);
+        const fs = yield* FileSystem.FileSystem;
+
+        const exists = yield* fs.exists(inputPath);
+        if (!exists) {
+          return yield* Effect.fail(
+            new ConfigError({ message: `Import file "${inputPath}" not found` })
+          );
+        }
+
+        const content = yield* fs.readFileString(inputPath).pipe(
+          Effect.catchAll((error) =>
+            Effect.fail(
+              new ConfigError({
+                message: "Failed to read import file",
+                cause: error,
+              })
+            )
+          )
+        );
+
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(content);
+        } catch (e) {
+          return yield* Effect.fail(
+            new ConfigError({ message: "Import file is not valid JSON" })
+          );
+        }
+
+        const importedConfig = yield* Schema.decodeUnknown(configSchema)(
+          parsed
+        ).pipe(
+          Effect.catchAll((e) =>
+            Effect.fail(
+              new ConfigError({
+                message: "Import file does not match config schema",
+                cause: e,
+              })
+            )
+          )
+        );
+
+        // Update current config
+        // We need to expand home paths for the runtime config
+        const promptsDir = yield* expandHome(importedConfig.promptsDirectory);
+        const reposDir = yield* expandHome(importedConfig.reposDirectory);
+
+        config = {
+          ...importedConfig,
+          promptsDirectory: promptsDir,
+          reposDirectory: reposDir,
+        };
+
+        // Write to default config file
+        yield* writeConfig(config);
+        yield* Effect.logInfo(`Configuration imported from ${inputPath}`);
+      }),
+
+    /**
      * Cleans the local files for a repository (without removing it from config).
      * @param repoName The name of the repository to clean.
      */
