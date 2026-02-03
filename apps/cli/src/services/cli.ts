@@ -526,6 +526,34 @@ const configCommand = Command.make('config', {}, () =>
 	}).pipe(Effect.provide(programLayer))
 ).pipe(Command.withSubcommands([configModelCommand, configReposCommand, configResetCommand]));
 
+// === Clean Subcommand ===
+const cleanTechOption = Options.text('tech').pipe(Options.withAlias('t'), Options.optional);
+
+/**
+ * Command to clean local repository caches.
+ */
+const cleanCommand = Command.make('clean', { tech: cleanTechOption }, ({ tech }) =>
+	Effect.gen(function* () {
+		const config = yield* ConfigService;
+
+		if (tech._tag === 'Some') {
+			yield* Effect.logDebug(`Command: clean, tech: ${tech.value}`);
+			yield* config.cleanRepo(tech.value);
+		} else {
+			yield* Effect.logDebug(`Command: clean all`);
+			yield* config.cleanAllRepos();
+		}
+	}).pipe(
+		Effect.catchTag('ConfigError', (e) =>
+			Effect.sync(() => {
+				console.error(`Error: ${e.message}`);
+				process.exit(1);
+			})
+		),
+		Effect.provide(programLayer)
+	)
+);
+
 // === Update Subcommand ===
 const updateCommand = Command.make('update', {}, () =>
 	Effect.gen(function* () {
@@ -810,7 +838,8 @@ const mainCommand = Command.make('btca', {}, () =>
 		configCommand,
 		historyCommand,
 		doctorCommand,
-		updateCommand
+		updateCommand,
+		cleanCommand
 	])
 );
 

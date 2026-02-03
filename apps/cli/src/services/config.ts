@@ -290,6 +290,36 @@ const configService = Effect.gen(function* () {
       return repo;
     });
 
+  const cleanRepoInternal = (repoName: string) =>
+    Effect.gen(function* () {
+      yield* Effect.logDebug(`Cleaning repo files: ${repoName}`);
+      const repo = config.repos.find((r) => r.name === repoName);
+      if (!repo) {
+        return yield* Effect.fail(
+          new ConfigError({ message: `Repo "${repoName}" not found` })
+        );
+      }
+
+      const repoDir = path.join(config.reposDirectory, repo.name);
+      const exists = yield* directoryExists(repoDir);
+      if (exists) {
+        yield* Effect.log(`Removing directory ${repoDir}...`);
+        yield* fs.remove(repoDir, { recursive: true }).pipe(
+          Effect.catchAll((error) =>
+            Effect.fail(
+              new ConfigError({
+                message: "Failed to remove directory",
+                cause: error,
+              })
+            )
+          )
+        );
+        yield* Effect.logInfo(`Cleaned files for repo "${repoName}"`);
+      } else {
+        yield* Effect.logInfo(`No files found for repo "${repoName}"`);
+      }
+    });
+
   return {
     /**
      * Returns the path to the current configuration file.
@@ -460,6 +490,28 @@ const configService = Effect.gen(function* () {
         for (const repo of repos) {
           yield* cloneOrUpdateOneRepoLocally(repo.name);
         }
+      }),
+    /**
+     * Cleans the local files for a repository (without removing it from config).
+     * @param repoName The name of the repository to clean.
+     */
+    cleanRepo: cleanRepoInternal,
+    /**
+     * Cleans all local repository files.
+     */
+    cleanAllRepos: () =>
+      Effect.gen(function* () {
+        yield* Effect.logDebug("Cleaning all repository files...");
+        const repos = config.repos;
+        if (repos.length === 0) {
+          yield* Effect.logInfo("No repositories configured.");
+          return;
+        }
+
+        for (const repo of repos) {
+          yield* cleanRepoInternal(repo.name);
+        }
+        yield* Effect.logInfo("All repositories cleaned.");
       }),
   };
 });
