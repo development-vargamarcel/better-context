@@ -103,6 +103,14 @@ Update all repos:
 btca update
 ```
 
+Clean local repos (removes files but keeps config):
+
+```bash
+btca clean
+# or clean a specific repo
+btca clean -t svelte
+```
+
 ## Debugging
 
 To enable debug logs, set `EFFECT_LOG_LEVEL=DEBUG`:
