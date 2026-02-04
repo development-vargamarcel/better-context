@@ -112,9 +112,16 @@ const OPENCODE_CONFIG = (args: {
   repoName: string;
   reposDirectory: string;
   specialNotes?: string;
+  /**
+   * Optional absolute path to the repository.
+   * If provided, it overrides the default path resolution (reposDirectory + repoName).
+   */
+  absoluteRepoPath?: string;
 }): Effect.Effect<OpenCodeConfig, never, Path.Path> =>
   Effect.gen(function* () {
     const path = yield* Path.Path;
+    const repoPath =
+      args.absoluteRepoPath ?? path.join(args.reposDirectory, args.repoName);
     return {
       agent: {
         build: {
@@ -132,7 +139,7 @@ const OPENCODE_CONFIG = (args: {
         docs: {
           prompt: getDocsAgentPrompt({
             repoName: args.repoName,
-            repoPath: path.join(args.reposDirectory, args.repoName),
+            repoPath,
             specialNotes: args.specialNotes,
           }),
           disable: false,
@@ -272,6 +279,16 @@ const configService = Effect.gen(function* () {
   const cloneOrUpdateOneRepoLocally = (repoName: string) =>
     Effect.gen(function* () {
       yield* Effect.logDebug(`Request to clone/update repo: ${repoName}`);
+
+      if (repoName === "local") {
+        yield* Effect.logDebug("Skipping clone/update for local directory");
+        return {
+          name: "local",
+          url: "local",
+          branch: "local",
+        };
+      }
+
       const repo = yield* getRepo({ repoName, config });
       const repoDir = path.join(config.reposDirectory, repo.name);
       const branch = repo.branch ?? "main";
@@ -293,6 +310,12 @@ const configService = Effect.gen(function* () {
   const cleanRepoInternal = (repoName: string) =>
     Effect.gen(function* () {
       yield* Effect.logDebug(`Cleaning repo files: ${repoName}`);
+
+      if (repoName === "local") {
+        yield* Effect.logWarning("Cannot clean local directory. Skipping.");
+        return;
+      }
+
       const repo = config.repos.find((r) => r.name === repoName);
       if (!repo) {
         return yield* Effect.fail(
@@ -337,6 +360,9 @@ const configService = Effect.gen(function* () {
     getRepoPath: (repoName: string) =>
       Effect.gen(function* () {
         yield* Effect.logDebug(`Getting path for repo: ${repoName}`);
+        if (repoName === "local") {
+          return process.cwd();
+        }
         const repo = yield* cloneOrUpdateOneRepoLocally(repoName);
         return path.join(config.reposDirectory, repo.name);
       }),
@@ -349,6 +375,15 @@ const configService = Effect.gen(function* () {
         yield* Effect.logDebug(
           `Generating OpenCode config for: ${args.repoName}`
         );
+
+        if (args.repoName === "local") {
+          return yield* OPENCODE_CONFIG({
+            repoName: "local",
+            reposDirectory: "",
+            absoluteRepoPath: process.cwd(),
+          });
+        }
+
         const repo = yield* getRepo({ repoName: args.repoName, config }).pipe(
           Effect.catchTag("ConfigError", () => Effect.succeed(undefined))
         );
