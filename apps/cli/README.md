@@ -230,6 +230,19 @@ Updates (git pull) all configured repositories.
 btca update
 ```
 
+### `btca status`
+
+Check the sync status of repositories (behind/ahead/dirty).
+
+```bash
+btca status
+btca status -t <tech>
+```
+
+Options:
+
+- `-t, --tech` - The technology/repo to check status for. If omitted, checks all.
+
 ### `btca doctor`
 
 Checks the health of your environment, including:

@@ -877,6 +877,91 @@ const infoCommand = Command.make('info', { tech: infoTechOption }, ({ tech }) =>
 	)
 );
 
+// === Status Subcommand ===
+const statusTechOption = Options.text('tech').pipe(Options.withAlias('t'), Options.optional);
+
+const statusCommand = Command.make('status', { tech: statusTechOption }, ({ tech }) =>
+	Effect.gen(function* () {
+		const config = yield* ConfigService;
+
+		const printStatus = (name: string, status: any) => {
+			console.log(`Repository: ${name}`);
+			if (!status.exists) {
+				console.log(`Status: Not found locally`);
+				console.log(`Path: ${status.path}`);
+				return;
+			}
+
+			if (status.dirty) {
+				console.log(`Status: Dirty (Uncommitted changes)`);
+			} else if (status.behind > 0) {
+				console.log(`Status: Behind by ${status.behind} commits`);
+			} else if (status.ahead > 0) {
+				console.log(`Status: Ahead by ${status.ahead} commits`);
+			} else {
+				console.log(`Status: Up to date`);
+			}
+
+			if (status.behind > 0 && status.ahead > 0) {
+				console.log(`(Diverged: ${status.ahead} ahead, ${status.behind} behind)`);
+			}
+
+			console.log(`Path: ${status.path}`);
+		};
+
+		const printStatusRow = (name: string, status: any) => {
+			let statusText = 'Up to date';
+			let details = '';
+
+			if (!status.exists) {
+				statusText = 'Missing';
+			} else if (status.dirty) {
+				statusText = 'Dirty';
+			} else if (status.behind > 0 && status.ahead > 0) {
+				statusText = 'Diverged';
+				details = `${status.ahead} ahead, ${status.behind} behind`;
+			} else if (status.behind > 0) {
+				statusText = 'Behind';
+				details = `${status.behind} commits`;
+			} else if (status.ahead > 0) {
+				statusText = 'Ahead';
+				details = `${status.ahead} commits`;
+			}
+
+			console.log(`${name.padEnd(20)} ${statusText.padEnd(15)} ${details}`);
+		};
+
+		if (tech._tag === 'Some') {
+			yield* Effect.logDebug(`Command: status, tech: ${tech.value}`);
+			const status = yield* config.getRepoStatus(tech.value);
+			printStatus(tech.value, status);
+		} else {
+			yield* Effect.logDebug(`Command: status all`);
+			const repos = yield* config.getRepos();
+			if (repos.length === 0) {
+				console.log('No repositories configured.');
+				return;
+			}
+			console.log('Repository Status:\n');
+			console.log(`${'Name'.padEnd(20)} ${'Status'.padEnd(15)} ${'Details'}`);
+			console.log('-'.repeat(60));
+
+			for (const repo of repos) {
+				const status = yield* config.getRepoStatus(repo.name);
+				printStatusRow(repo.name, status);
+			}
+		}
+	}).pipe(
+		Effect.catchTag('ConfigError', (e) =>
+			Effect.sync(() => {
+				console.error(`Error: ${e.message}`);
+				process.exit(1);
+			})
+		),
+		Effect.provide(programLayer)
+	)
+);
+
 // === Main Command ===
 const mainCommand = Command.make('btca', {}, () =>
 	Effect.sync(() => {
@@ -896,7 +981,8 @@ const mainCommand = Command.make('btca', {}, () =>
 		historyCommand,
 		doctorCommand,
 		updateCommand,
-		cleanCommand
+		cleanCommand,
+		statusCommand
 	])
 );
 
