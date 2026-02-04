@@ -23,6 +23,12 @@ btca ask -q "How do stores work in Svelte 5?"
 btca ask -t svelte -q "How do stores work in Svelte 5?"
 ```
 
+Ask a question about the current directory:
+
+```bash
+btca ask -t local -q "How does this feature work?"
+```
+
 Open the TUI:
 
 ```bash

@@ -50,11 +50,24 @@ export const selectRepo = (techOption: Option.Option<string>): Effect.Effect<str
     const repos = yield* config.getRepos();
 
     if (repos.length === 0) {
-      return yield* Effect.fail(new ConfigError({ message: "No repositories configured." }));
+      // Even if no repos are configured, we should allow 'local'
+      // But maybe the user just wants to use local.
+      // If no repos, we can just show local?
+      // Let's stick to showing local + repos.
     }
 
     yield* Console.log("Please select a repository:");
     const repoNames = repos.map((r) => r.name);
+    const localOption = "local (Current Directory)";
 
-    return yield* promptSelection("Enter number or name: ", repoNames);
+    const selection = yield* promptSelection("Enter number or name: ", [
+      localOption,
+      ...repoNames,
+    ]);
+
+    if (selection === localOption) {
+      return "local";
+    }
+
+    return selection;
   });
