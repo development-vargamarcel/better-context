@@ -509,6 +509,53 @@ const configResetCommand = Command.make('reset', {}, () =>
 	}).pipe(Effect.provide(programLayer))
 );
 
+// config export - export config to file
+const configExportPathOption = Options.text('path').pipe(
+	Options.withAlias('p'),
+	Options.withDefault('btca-config.json')
+);
+
+const configExportCommand = Command.make(
+	'export',
+	{ path: configExportPathOption },
+	({ path }) =>
+		Effect.gen(function* () {
+			const config = yield* ConfigService;
+			yield* config.exportConfig(path);
+			console.log(`Configuration exported to ${path}.`);
+		}).pipe(
+			Effect.catchTag('ConfigError', (e) =>
+				Effect.sync(() => {
+					console.error(`Error: ${e.message}`);
+					process.exit(1);
+				})
+			),
+			Effect.provide(programLayer)
+		)
+);
+
+// config import - import config from file
+const configImportPathOption = Options.text('path').pipe(Options.withAlias('p'));
+
+const configImportCommand = Command.make(
+	'import',
+	{ path: configImportPathOption },
+	({ path }) =>
+		Effect.gen(function* () {
+			const config = yield* ConfigService;
+			yield* config.importConfig(path);
+			console.log(`Configuration imported from ${path}.`);
+		}).pipe(
+			Effect.catchTag('ConfigError', (e) =>
+				Effect.sync(() => {
+					console.error(`Error: ${e.message}`);
+					process.exit(1);
+				})
+			),
+			Effect.provide(programLayer)
+		)
+);
+
 // config - parent command
 const configCommand = Command.make('config', {}, () =>
 	Effect.gen(function* () {
@@ -522,9 +569,19 @@ const configCommand = Command.make('config', {}, () =>
 		console.log('Commands:');
 		console.log('  model   View or set the model and provider');
 		console.log('  repos   Manage configured repos');
+		console.log('  export  Export configuration to a file');
+		console.log('  import  Import configuration from a file');
 		console.log('  reset   Reset configuration to defaults');
 	}).pipe(Effect.provide(programLayer))
-).pipe(Command.withSubcommands([configModelCommand, configReposCommand, configResetCommand]));
+).pipe(
+	Command.withSubcommands([
+		configModelCommand,
+		configReposCommand,
+		configResetCommand,
+		configExportCommand,
+		configImportCommand
+	])
+);
 
 // === Clean Subcommand ===
 const cleanTechOption = Options.text('tech').pipe(Options.withAlias('t'), Options.optional);
