@@ -3,7 +3,13 @@ import { FileSystem, Path } from "@effect/platform";
 import { Effect, Schema } from "effect";
 import { getDocsAgentPrompt } from "../lib/prompts.ts";
 import { ConfigError } from "../lib/errors.ts";
-import { cloneRepo, pullRepo, validateRepo } from "../lib/utils/git.ts";
+import {
+  cloneRepo,
+  pullRepo,
+  validateRepo,
+  fetchRepo,
+  getRepoStatus,
+} from "../lib/utils/git.ts";
 import { directoryExists, expandHome } from "../lib/utils/files.ts";
 
 const CONFIG_DIRECTORY = "~/.config/btca";
@@ -643,6 +649,59 @@ const configService = Effect.gen(function* () {
           yield* cleanRepoInternal(repo.name);
         }
         yield* Effect.logInfo("All repositories cleaned.");
+      }),
+    /**
+     * Gets the status of a repository (ahead/behind/dirty).
+     * @param repoName The name of the repository.
+     */
+    getRepoStatus: (repoName: string) =>
+      Effect.gen(function* () {
+        yield* Effect.logDebug(`Getting status for repo: ${repoName}`);
+
+        if (repoName === "local") {
+          return {
+            exists: true,
+            dirty: false,
+            ahead: 0,
+            behind: 0,
+            path: process.cwd(),
+          };
+        }
+
+        const repo = config.repos.find((r) => r.name === repoName);
+        if (!repo) {
+          return yield* Effect.fail(
+            new ConfigError({ message: `Repo "${repoName}" not found` })
+          );
+        }
+
+        const repoDir = path.join(config.reposDirectory, repo.name);
+        const exists = yield* directoryExists(repoDir);
+
+        if (!exists) {
+          return {
+            exists: false,
+            dirty: false,
+            ahead: 0,
+            behind: 0,
+            path: repoDir,
+          };
+        }
+
+        // Fetch updates
+        yield* fetchRepo({ repoDir });
+
+        // Get status
+        const status = yield* getRepoStatus({
+          repoDir,
+          branch: repo.branch ?? "main",
+        });
+
+        return {
+          exists: true,
+          path: repoDir,
+          ...status,
+        };
       }),
   };
 });
