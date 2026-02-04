@@ -7,6 +7,7 @@ import { ConfigService } from './config.ts';
 import { HistoryService } from './history.ts';
 import { GeneralError } from '../lib/errors.ts';
 import { selectRepo } from '../lib/ui.ts';
+import { getLanguageBreakdown, getTopContributors, getTotalLines } from '../lib/git-stats.ts';
 
 declare const __VERSION__: string;
 const VERSION: string = typeof __VERSION__ !== 'undefined' ? __VERSION__ : '0.0.0-dev';
@@ -998,6 +999,55 @@ const codeCommand = Command.make('code', { tech: codeTechOption }, ({ tech }) =>
 	)
 );
 
+// === Stats Subcommand ===
+const statsTechOption = Options.text('tech').pipe(Options.withAlias('t'), Options.optional);
+
+/**
+ * Command to show statistics about the repository.
+ */
+const statsCommand = Command.make('stats', { tech: statsTechOption }, ({ tech }) =>
+	Effect.gen(function* () {
+		const selectedTech = yield* selectRepo(tech);
+		yield* Effect.logDebug(`Command: stats, tech: ${selectedTech}`);
+		const config = yield* ConfigService;
+		const repoPath = yield* config.getRepoPath(selectedTech);
+
+		yield* Effect.logInfo(`Gathering stats for ${selectedTech} at ${repoPath}...`);
+
+		// Run in parallel
+		const [langBreakdown, totalLines, contributors] = yield* Effect.all(
+			[
+				getLanguageBreakdown(repoPath),
+				getTotalLines(repoPath),
+				getTopContributors(repoPath)
+			],
+			{ concurrency: 3 }
+		);
+
+		console.log(`\nRepository Statistics: ${selectedTech}\n`);
+		console.log(`Total Files: ${langBreakdown.totalFiles}`);
+		console.log(`Total Lines of Code: ${totalLines}`);
+		console.log('\nTop Contributors:');
+		contributors.forEach((c) => console.log(`  ${c.name}: ${c.commits} commits`));
+		console.log('\nLanguage Breakdown:');
+		const sortedExtensions = Object.entries(langBreakdown.extensions).sort(
+			(a, b) => b[1] - a[1]
+		);
+		sortedExtensions.forEach(([ext, count]) =>
+			console.log(`  .${ext}: ${count} files`)
+		);
+		console.log('');
+	}).pipe(
+		Effect.catchTag('ConfigError', (e) =>
+			Effect.sync(() => {
+				console.error(`Error: ${e.message}`);
+				process.exit(1);
+			})
+		),
+		Effect.provide(programLayer)
+	)
+);
+
 // === Main Command ===
 const mainCommand = Command.make('btca', {}, () =>
 	Effect.sync(() => {
@@ -1019,7 +1069,8 @@ const mainCommand = Command.make('btca', {}, () =>
 		updateCommand,
 		cleanCommand,
 		statusCommand,
-		codeCommand
+		codeCommand,
+		statsCommand
 	])
 );
 

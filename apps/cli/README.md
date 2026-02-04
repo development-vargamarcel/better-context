@@ -243,6 +243,19 @@ Options:
 
 - `-t, --tech` - The technology/repo to check status for. If omitted, checks all.
 
+### `btca stats`
+
+Show statistics about the repository, including file counts, language breakdown, total lines of code, and top contributors.
+
+```bash
+btca stats
+btca stats -t <tech>
+```
+
+Options:
+
+- `-t, --tech` - The technology/repo to show stats for
+
 ### `btca doctor`
 
 Checks the health of your environment, including:
