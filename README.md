@@ -45,6 +45,14 @@ btca browse
 btca browse -t svelte
 ```
 
+Open in editor (uses $VISUAL, $EDITOR, or defaults to VS Code):
+
+```bash
+btca code
+# or
+btca code -t svelte
+```
+
 Search local repo:
 
 ```bash

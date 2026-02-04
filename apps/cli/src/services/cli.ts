@@ -962,6 +962,42 @@ const statusCommand = Command.make('status', { tech: statusTechOption }, ({ tech
 	)
 );
 
+// === Code Subcommand ===
+const codeTechOption = Options.text('tech').pipe(Options.withAlias('t'), Options.optional);
+
+/**
+ * Command to open the repository in a code editor.
+ */
+const codeCommand = Command.make('code', { tech: codeTechOption }, ({ tech }) =>
+	Effect.gen(function* () {
+		const selectedTech = yield* selectRepo(tech);
+		yield* Effect.logDebug(`Command: code, tech: ${selectedTech}`);
+		const config = yield* ConfigService;
+		const repoPath = yield* config.getRepoPath(selectedTech);
+
+		// Determine editor command
+		const editor = process.env.VISUAL || process.env.EDITOR || 'code';
+
+		yield* Effect.logInfo(`Opening ${selectedTech} at ${repoPath} in ${editor}...`);
+
+		const proc = Bun.spawn([editor, repoPath], {
+			stderr: 'ignore',
+			stdout: 'ignore',
+			stdin: 'ignore'
+		});
+
+		proc.unref();
+	}).pipe(
+		Effect.catchTag('ConfigError', (e) =>
+			Effect.sync(() => {
+				console.error(`Error: ${e.message}`);
+				process.exit(1);
+			})
+		),
+		Effect.provide(programLayer)
+	)
+);
+
 // === Main Command ===
 const mainCommand = Command.make('btca', {}, () =>
 	Effect.sync(() => {
@@ -982,7 +1018,8 @@ const mainCommand = Command.make('btca', {}, () =>
 		doctorCommand,
 		updateCommand,
 		cleanCommand,
-		statusCommand
+		statusCommand,
+		codeCommand
 	])
 );
 
