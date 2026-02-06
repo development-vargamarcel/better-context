@@ -1,3 +1,5 @@
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import { Command, Options } from '@effect/cli';
 import { HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from '@effect/platform';
 import { BunHttpServer } from '@effect/platform-bun';
@@ -14,6 +16,48 @@ declare const __VERSION__: string;
 const VERSION: string = typeof __VERSION__ !== 'undefined' ? __VERSION__ : '0.0.0-dev';
 
 const programLayer = Layer.mergeAll(OcService.Default, ConfigService.Default, HistoryService.Default, BookmarkService.Default);
+
+const handleAnswerStream = <R>(args: {
+	eventStream: Stream.Stream<OcEvent, any>;
+	history?: { addEntry: (entry: { tech: string; question: string; answer: string }) => Effect.Effect<any, any, R> };
+	tech: string;
+	question: string;
+}) =>
+	Effect.gen(function* () {
+		let currentMessageId: string | null = null;
+		let fullAnswer = '';
+
+		yield* args.eventStream.pipe(
+			Stream.runForEach((event) =>
+				Effect.sync(() => {
+					switch (event.type) {
+						case 'message.part.updated':
+							if (event.properties.part.type === 'text') {
+								if (currentMessageId === event.properties.part.messageID) {
+									const delta = event.properties.delta ?? '';
+									process.stdout.write(delta);
+									fullAnswer += delta;
+								} else {
+									currentMessageId = event.properties.part.messageID;
+									const text = event.properties.part.text ?? '';
+									process.stdout.write('\n\n' + text);
+									fullAnswer += '\n\n' + text;
+								}
+							}
+							break;
+						default:
+							break;
+					}
+				})
+			)
+		);
+
+		if (fullAnswer.trim() && args.history) {
+			yield* args.history.addEntry({ tech: args.tech, question: args.question, answer: fullAnswer.trim() });
+		}
+
+		console.log('\n');
+	});
 
 // === Ask Subcommand ===
 const questionOption = Options.text('question').pipe(Options.withAlias('q'));
@@ -35,39 +79,12 @@ const askCommand = Command.make(
 			const history = yield* HistoryService;
 			const eventStream = yield* oc.askQuestion({ tech: selectedTech, question });
 
-			let currentMessageId: string | null = null;
-			let fullAnswer = '';
-
-			yield* eventStream.pipe(
-				Stream.runForEach((event) =>
-					Effect.sync(() => {
-						switch (event.type) {
-							case 'message.part.updated':
-								if (event.properties.part.type === 'text') {
-									if (currentMessageId === event.properties.part.messageID) {
-										const delta = event.properties.delta ?? '';
-										process.stdout.write(delta);
-										fullAnswer += delta;
-									} else {
-										currentMessageId = event.properties.part.messageID;
-										const text = event.properties.part.text ?? '';
-										process.stdout.write('\n\n' + text);
-										fullAnswer += '\n\n' + text;
-									}
-								}
-								break;
-							default:
-								break;
-						}
-					})
-				)
-			);
-
-			if (fullAnswer.trim()) {
-				yield* history.addEntry({ tech: selectedTech, question, answer: fullAnswer.trim() });
-			}
-
-			console.log('\n');
+			yield* handleAnswerStream({
+				eventStream,
+				history,
+				tech: selectedTech,
+				question
+			});
 		}).pipe(
 			Effect.catchTags({
 				ConfigError: (e) =>
@@ -1198,6 +1215,93 @@ const bookmarkCommand = Command.make('bookmark', {}, () =>
 	})
 ).pipe(Command.withSubcommands([bookmarkListCommand, bookmarkAddCommand, bookmarkRemoveCommand]));
 
+// === Explain Subcommand ===
+const explainFileOption = Options.text('file').pipe(Options.withAlias('f'));
+const explainTechOption = Options.text('tech').pipe(Options.withAlias('t'), Options.optional);
+
+/**
+ * Command to explain the code in a specific file.
+ */
+const explainCommand = Command.make(
+	'explain',
+	{ file: explainFileOption, tech: explainTechOption },
+	({ file, tech }) =>
+		Effect.gen(function* () {
+			const selectedTech = yield* selectRepo(tech);
+			yield* Effect.logDebug(`Command: explain, tech: ${selectedTech}, file: ${file}`);
+			const config = yield* ConfigService;
+
+			let repoPath: string;
+			if (selectedTech === 'local') {
+				repoPath = process.cwd();
+			} else {
+				repoPath = yield* config.getRepoPath(selectedTech);
+			}
+
+			const absolutePath = path.resolve(repoPath, file);
+			yield* Effect.logDebug(`Reading file: ${absolutePath}`);
+
+			let content: string;
+			const readResult = yield* Effect.tryPromise(() => fs.readFile(absolutePath, 'utf-8')).pipe(
+				Effect.exit
+			);
+
+			if (readResult._tag === 'Failure') {
+				console.error(`Error: File not found or unreadable: ${absolutePath}`);
+				return;
+			}
+			content = readResult.value;
+
+			const question = `Explain the code in ${file}:\n\n\`\`\`\n${content}\n\`\`\``;
+
+			const oc = yield* OcService;
+			const history = yield* HistoryService;
+
+			const eventStream = yield* oc.askQuestion({ tech: selectedTech, question });
+
+			yield* handleAnswerStream({
+				eventStream,
+				history,
+				tech: selectedTech,
+				question
+			});
+		}).pipe(
+			Effect.catchTags({
+				ConfigError: (e) =>
+					Effect.sync(() => {
+						console.error(`Error: ${e.message}`);
+						process.exit(1);
+					}),
+				InvalidProviderError: (e) =>
+					Effect.sync(() => {
+						console.error(`Error: Unknown provider "${e.providerId}"`);
+						console.error(`Available providers: ${e.availableProviders.join(', ')}`);
+						process.exit(1);
+					}),
+				InvalidModelError: (e) =>
+					Effect.sync(() => {
+						console.error(`Error: Unknown model "${e.modelId}" for provider "${e.providerId}"`);
+						console.error(`Available models: ${e.availableModels.join(', ')}`);
+						process.exit(1);
+					}),
+				ProviderNotConnectedError: (e) =>
+					Effect.sync(() => {
+						console.error(`Error: Provider "${e.providerId}" is not connected`);
+						console.error(`Connected providers: ${e.connectedProviders.join(', ')}`);
+						console.error(`Run "opencode auth" to configure provider credentials.`);
+						process.exit(1);
+					}),
+				OcError: (e) =>
+					Effect.sync(() => {
+						console.error(`Error: ${e.message}`);
+						if (e.cause) console.error(e.cause);
+						process.exit(1);
+					})
+			}),
+			Effect.provide(programLayer)
+		)
+);
+
 // === Main Command ===
 const mainCommand = Command.make('btca', {}, () =>
 	Effect.sync(() => {
@@ -1206,6 +1310,7 @@ const mainCommand = Command.make('btca', {}, () =>
 ).pipe(
 	Command.withSubcommands([
 		askCommand,
+		explainCommand,
 		serveCommand,
 		openCommand,
 		chatCommand,

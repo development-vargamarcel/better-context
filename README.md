@@ -29,6 +29,14 @@ Ask a question about the current directory:
 btca ask -t local -q "How does this feature work?"
 ```
 
+Explain a specific file:
+
+```bash
+btca explain -f src/lib/index.ts
+# or
+btca explain -t svelte -f src/runtime/index.ts
+```
+
 Open the TUI:
 
 ```bash
