@@ -37,6 +37,14 @@ btca explain -f src/lib/index.ts
 btca explain -t svelte -f src/runtime/index.ts
 ```
 
+Get a summary of the repository:
+
+```bash
+btca summary
+# or
+btca summary -t svelte
+```
+
 Open the TUI:
 
 ```bash

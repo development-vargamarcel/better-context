@@ -1302,6 +1302,74 @@ const explainCommand = Command.make(
 		)
 );
 
+// === Summary Subcommand ===
+const summaryTechOption = Options.text('tech').pipe(Options.withAlias('t'), Options.optional);
+
+/**
+ * Command to generate a summary of the repository.
+ */
+const summaryCommand = Command.make(
+	'summary',
+	{ tech: summaryTechOption },
+	({ tech }) =>
+		Effect.gen(function* () {
+			const selectedTech = yield* selectRepo(tech);
+			yield* Effect.logDebug(`Command: summary, tech: ${selectedTech}`);
+			const oc = yield* OcService;
+			const history = yield* HistoryService;
+
+			const question = `Please provide a comprehensive summary of this repository. Include:
+1. The main purpose of the project.
+2. The key technologies used.
+3. The high-level architecture or directory structure.
+4. Key features or capabilities.
+Keep it concise but informative.`;
+
+			const eventStream = yield* oc.askQuestion({ tech: selectedTech, question });
+
+			yield* handleAnswerStream({
+				eventStream,
+				history,
+				tech: selectedTech,
+				question
+			});
+		}).pipe(
+			Effect.catchTags({
+				ConfigError: (e) =>
+					Effect.sync(() => {
+						console.error(`Error: ${e.message}`);
+						process.exit(1);
+					}),
+				InvalidProviderError: (e) =>
+					Effect.sync(() => {
+						console.error(`Error: Unknown provider "${e.providerId}"`);
+						console.error(`Available providers: ${e.availableProviders.join(', ')}`);
+						process.exit(1);
+					}),
+				InvalidModelError: (e) =>
+					Effect.sync(() => {
+						console.error(`Error: Unknown model "${e.modelId}" for provider "${e.providerId}"`);
+						console.error(`Available models: ${e.availableModels.join(', ')}`);
+						process.exit(1);
+					}),
+				ProviderNotConnectedError: (e) =>
+					Effect.sync(() => {
+						console.error(`Error: Provider "${e.providerId}" is not connected`);
+						console.error(`Connected providers: ${e.connectedProviders.join(', ')}`);
+						console.error(`Run "opencode auth" to configure provider credentials.`);
+						process.exit(1);
+					}),
+				OcError: (e) =>
+					Effect.sync(() => {
+						console.error(`Error: ${e.message}`);
+						if (e.cause) console.error(e.cause);
+						process.exit(1);
+					})
+			}),
+			Effect.provide(programLayer)
+		)
+);
+
 // === Main Command ===
 const mainCommand = Command.make('btca', {}, () =>
 	Effect.sync(() => {
@@ -1311,6 +1379,7 @@ const mainCommand = Command.make('btca', {}, () =>
 	Command.withSubcommands([
 		askCommand,
 		explainCommand,
+		summaryCommand,
 		serveCommand,
 		openCommand,
 		chatCommand,
