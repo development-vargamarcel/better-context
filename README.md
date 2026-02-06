@@ -85,6 +85,26 @@ btca info
 btca info -t svelte
 ```
 
+View git log:
+
+```bash
+btca log
+# or
+btca log -t svelte -n 20
+# or see incoming changes
+btca log -t svelte --incoming
+```
+
+View git diff:
+
+```bash
+btca diff
+# or
+btca diff -t svelte
+# or staged changes
+btca diff --cached
+```
+
 Run as a server:
 
 ```bash
