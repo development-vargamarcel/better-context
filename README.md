@@ -145,6 +145,24 @@ Add a repo (validates URL automatically):
 btca config repos add --name my-lib --url https://github.com/my/lib
 ```
 
+## Bookmarks
+
+Manage bookmarked QA pairs:
+
+```bash
+# List all bookmarks
+btca bookmark list
+
+# Add a bookmark (interactive from recent history)
+btca bookmark add
+
+# Add a bookmark manually
+btca bookmark add -q "Question" -a "Answer" -t "Tech"
+
+# Remove a bookmark (interactive)
+btca bookmark remove
+```
+
 ## Backup & Restore
 
 Export configuration to a file:

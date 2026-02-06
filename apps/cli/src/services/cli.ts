@@ -5,14 +5,15 @@ import { Effect, Layer, Schema, Stream } from 'effect';
 import { OcService, type OcEvent } from './oc.ts';
 import { ConfigService } from './config.ts';
 import { HistoryService } from './history.ts';
+import { BookmarkService } from './bookmark.ts';
 import { GeneralError } from '../lib/errors.ts';
-import { selectRepo } from '../lib/ui.ts';
+import { selectRepo, promptSelection } from '../lib/ui.ts';
 import { getLanguageBreakdown, getTopContributors, getTotalLines } from '../lib/git-stats.ts';
 
 declare const __VERSION__: string;
 const VERSION: string = typeof __VERSION__ !== 'undefined' ? __VERSION__ : '0.0.0-dev';
 
-const programLayer = Layer.mergeAll(OcService.Default, ConfigService.Default, HistoryService.Default);
+const programLayer = Layer.mergeAll(OcService.Default, ConfigService.Default, HistoryService.Default, BookmarkService.Default);
 
 // === Ask Subcommand ===
 const questionOption = Options.text('question').pipe(Options.withAlias('q'));
@@ -1048,6 +1049,155 @@ const statsCommand = Command.make('stats', { tech: statsTechOption }, ({ tech })
 	)
 );
 
+// === Bookmark Subcommands ===
+
+const bookmarkListCommand = Command.make('list', {}, () =>
+	Effect.gen(function* () {
+		const bookmarkService = yield* BookmarkService;
+		const bookmarks = yield* bookmarkService.getBookmarks();
+
+		if (bookmarks.length === 0) {
+			console.log('No bookmarks found.');
+			return;
+		}
+
+		console.log('Bookmarks:\n');
+		for (const b of bookmarks) {
+			const date = new Date(b.timestamp).toLocaleString();
+			console.log(`[${b.id.substring(0, 8)}] ${date} - ${b.tech}`);
+			console.log(`Q: ${b.question}`);
+			if (b.note) console.log(`Note: ${b.note}`);
+			console.log('');
+		}
+	}).pipe(Effect.provide(programLayer))
+);
+
+const bookmarkQuestionOption = Options.text('question').pipe(Options.withAlias('q'), Options.optional);
+const bookmarkAnswerOption = Options.text('answer').pipe(Options.withAlias('a'), Options.optional);
+const bookmarkTechOption = Options.text('tech').pipe(Options.withAlias('t'), Options.optional);
+const bookmarkNoteOption = Options.text('note').pipe(Options.withAlias('n'), Options.optional);
+
+const bookmarkAddCommand = Command.make(
+	'add',
+	{
+		question: bookmarkQuestionOption,
+		answer: bookmarkAnswerOption,
+		tech: bookmarkTechOption,
+		note: bookmarkNoteOption
+	},
+	({ question, answer, tech, note }) =>
+		Effect.gen(function* () {
+			const bookmarkService = yield* BookmarkService;
+			const historyService = yield* HistoryService;
+
+			// Manual mode
+			if (question._tag === 'Some' && answer._tag === 'Some' && tech._tag === 'Some') {
+				yield* bookmarkService.addBookmark({
+					question: question.value,
+					answer: answer.value,
+					tech: tech.value,
+					note: note._tag === 'Some' ? note.value : undefined
+				});
+				console.log('Bookmark added manually.');
+				return;
+			}
+
+			// If missing some flags but present others
+			if (question._tag === 'Some' || answer._tag === 'Some' || tech._tag === 'Some') {
+				console.error(
+					'Error: To add manually, you must provide --question, --answer, and --tech.'
+				);
+				process.exit(1);
+			}
+
+			// Interactive mode (from history)
+			const entries = yield* historyService.getEntries(10);
+			if (entries.length === 0) {
+				console.log('No recent history to bookmark.');
+				return;
+			}
+
+			const optionsMap = new Map<string, any>();
+			const selectionOptions: string[] = [];
+
+			entries.forEach((e) => {
+				const date = new Date(e.timestamp).toLocaleDateString();
+				const qShort = e.question.replace(/\n/g, ' ').substring(0, 40);
+				const str = `${date} - ${e.tech}: ${qShort}`;
+				optionsMap.set(str, e);
+				selectionOptions.push(str);
+			});
+
+			try {
+				const selection = yield* promptSelection(
+					'Select history item to bookmark: ',
+					selectionOptions
+				);
+				const entry = optionsMap.get(selection);
+
+				if (entry) {
+					yield* bookmarkService.addBookmark({
+						question: entry.question,
+						answer: entry.answer,
+						tech: entry.tech,
+						note: note._tag === 'Some' ? note.value : undefined
+					});
+					console.log('Bookmark added from history.');
+				}
+			} catch (e) {
+				console.log('Operation cancelled.');
+			}
+		}).pipe(Effect.provide(programLayer))
+);
+
+const bookmarkRemoveCommand = Command.make('remove', {}, () =>
+	Effect.gen(function* () {
+		const bookmarkService = yield* BookmarkService;
+		const bookmarks = yield* bookmarkService.getBookmarks();
+
+		if (bookmarks.length === 0) {
+			console.log('No bookmarks to remove.');
+			return;
+		}
+
+		const optionsMap = new Map<string, string>();
+		const selectionOptions: string[] = [];
+
+		bookmarks.forEach((b) => {
+			const date = new Date(b.timestamp).toLocaleDateString();
+			const str = `[${b.id.substring(0, 6)}] ${date} - ${b.tech}: ${b.question.substring(0, 40)}`;
+			optionsMap.set(str, b.id);
+			selectionOptions.push(str);
+		});
+
+		try {
+			const selection = yield* promptSelection('Select bookmark to remove: ', selectionOptions);
+			const id = optionsMap.get(selection);
+
+			if (id) {
+				yield* bookmarkService.removeBookmark(id);
+				console.log('Bookmark removed.');
+			} else {
+				console.log('Invalid selection.');
+			}
+		} catch (e) {
+			// promptSelection fails if invalid selection
+			console.log('Operation cancelled.');
+		}
+	}).pipe(Effect.provide(programLayer))
+);
+
+const bookmarkCommand = Command.make('bookmark', {}, () =>
+	Effect.sync(() => {
+		console.log('Usage: btca bookmark <command>');
+		console.log('');
+		console.log('Commands:');
+		console.log('  list    List all bookmarks');
+		console.log('  add     Add a new bookmark');
+		console.log('  remove  Remove a bookmark');
+	})
+).pipe(Command.withSubcommands([bookmarkListCommand, bookmarkAddCommand, bookmarkRemoveCommand]));
+
 // === Main Command ===
 const mainCommand = Command.make('btca', {}, () =>
 	Effect.sync(() => {
@@ -1070,7 +1220,8 @@ const mainCommand = Command.make('btca', {}, () =>
 		cleanCommand,
 		statusCommand,
 		codeCommand,
-		statsCommand
+		statsCommand,
+		bookmarkCommand
 	])
 );
 
