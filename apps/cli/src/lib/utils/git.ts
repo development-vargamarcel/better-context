@@ -135,3 +135,75 @@ export const getRepoStatus = (args: { repoDir: string; branch: string }) =>
     catch: (error) =>
       new ConfigError({ message: "Failed to get repo status", cause: error }),
   });
+
+/**
+ * Gets the git log.
+ */
+export const getGitLog = (args: {
+  repoDir: string;
+  limit: number;
+  range?: string;
+}) =>
+  Effect.tryPromise({
+    try: async () => {
+      const { repoDir, limit, range } = args;
+      const cmd = [
+        "git",
+        "log",
+        `-${limit}`,
+        "--format=%h %ad | %s (%an)",
+        "--date=short",
+      ];
+      if (range) {
+        cmd.push(range);
+      }
+
+      const proc = Bun.spawn(cmd, {
+        cwd: repoDir,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const output = await new Response(proc.stdout).text();
+      const stderr = await new Response(proc.stderr).text();
+      const exitCode = await proc.exited;
+
+      if (exitCode !== 0) {
+        throw new Error(`git log failed: ${stderr.trim()}`);
+      }
+
+      return output.trim();
+    },
+    catch: (error) =>
+      new ConfigError({ message: "Failed to get git log", cause: error }),
+  });
+
+/**
+ * Gets the git diff.
+ */
+export const getGitDiff = (args: { repoDir: string; cached?: boolean }) =>
+  Effect.tryPromise({
+    try: async () => {
+      const { repoDir, cached } = args;
+      const cmd = ["git", "diff", "--color=always"];
+      if (cached) {
+        cmd.push("--cached");
+      }
+
+      const proc = Bun.spawn(cmd, {
+        cwd: repoDir,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const output = await new Response(proc.stdout).text();
+      const stderr = await new Response(proc.stderr).text();
+      const exitCode = await proc.exited;
+
+      if (exitCode !== 0) {
+        throw new Error(`git diff failed: ${stderr.trim()}`);
+      }
+
+      return output.trim();
+    },
+    catch: (error) =>
+      new ConfigError({ message: "Failed to get git diff", cause: error }),
+  });

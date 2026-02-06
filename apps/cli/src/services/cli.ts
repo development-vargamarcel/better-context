@@ -1302,6 +1302,81 @@ const explainCommand = Command.make(
 		)
 );
 
+// === Log Subcommand ===
+const logTechOption = Options.text('tech').pipe(Options.withAlias('t'), Options.optional);
+const logLimitOption = Options.integer('limit').pipe(
+	Options.withAlias('n'),
+	Options.withDefault(10)
+);
+const logIncomingOption = Options.boolean('incoming').pipe(
+	Options.withAlias('i'),
+	Options.withDefault(false)
+);
+
+/**
+ * Command to show the git log for a repository.
+ */
+const logCommand = Command.make(
+	'log',
+	{ tech: logTechOption, limit: logLimitOption, incoming: logIncomingOption },
+	({ tech, limit, incoming }) =>
+		Effect.gen(function* () {
+			const selectedTech = yield* selectRepo(tech);
+			yield* Effect.logDebug(
+				`Command: log, tech: ${selectedTech}, limit: ${limit}, incoming: ${incoming}`
+			);
+			const config = yield* ConfigService;
+
+			const log = yield* config.getRepoLog(selectedTech, limit, incoming);
+			if (log) {
+				console.log(log);
+			} else {
+				console.log('No log entries found.');
+			}
+		}).pipe(
+			Effect.catchTag('ConfigError', (e) =>
+				Effect.sync(() => {
+					console.error(`Error: ${e.message}`);
+					process.exit(1);
+				})
+			),
+			Effect.provide(programLayer)
+		)
+);
+
+// === Diff Subcommand ===
+const diffTechOption = Options.text('tech').pipe(Options.withAlias('t'), Options.optional);
+const diffCachedOption = Options.boolean('cached').pipe(Options.withDefault(false));
+
+/**
+ * Command to show the git diff for a repository.
+ */
+const diffCommand = Command.make(
+	'diff',
+	{ tech: diffTechOption, cached: diffCachedOption },
+	({ tech, cached }) =>
+		Effect.gen(function* () {
+			const selectedTech = yield* selectRepo(tech);
+			yield* Effect.logDebug(`Command: diff, tech: ${selectedTech}, cached: ${cached}`);
+			const config = yield* ConfigService;
+
+			const diff = yield* config.getRepoDiff(selectedTech, cached);
+			if (diff) {
+				console.log(diff);
+			} else {
+				// No output means no diff
+			}
+		}).pipe(
+			Effect.catchTag('ConfigError', (e) =>
+				Effect.sync(() => {
+					console.error(`Error: ${e.message}`);
+					process.exit(1);
+				})
+			),
+			Effect.provide(programLayer)
+		)
+);
+
 // === Summary Subcommand ===
 const summaryTechOption = Options.text('tech').pipe(Options.withAlias('t'), Options.optional);
 
@@ -1395,7 +1470,9 @@ const mainCommand = Command.make('btca', {}, () =>
 		statusCommand,
 		codeCommand,
 		statsCommand,
-		bookmarkCommand
+		bookmarkCommand,
+		logCommand,
+		diffCommand
 	])
 );
 

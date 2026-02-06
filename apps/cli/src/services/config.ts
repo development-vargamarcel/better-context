@@ -9,6 +9,8 @@ import {
   validateRepo,
   fetchRepo,
   getRepoStatus,
+  getGitLog,
+  getGitDiff,
 } from "../lib/utils/git.ts";
 import { directoryExists, expandHome } from "../lib/utils/files.ts";
 
@@ -702,6 +704,70 @@ const configService = Effect.gen(function* () {
           path: repoDir,
           ...status,
         };
+      }),
+    /**
+     * Gets the git log for a repository.
+     */
+    getRepoLog: (repoName: string, limit: number, incoming: boolean) =>
+      Effect.gen(function* () {
+        yield* Effect.logDebug(`Getting log for repo: ${repoName}`);
+
+        if (repoName === "local") {
+          if (incoming) {
+            yield* Effect.logWarning(
+              "Incoming changes not supported for local repo mode."
+            );
+          }
+          return yield* getGitLog({
+            repoDir: process.cwd(),
+            limit,
+          });
+        }
+
+        const repo = yield* getRepo({ repoName, config });
+        const repoDir = path.join(config.reposDirectory, repo.name);
+
+        // Ensure repo exists
+        const exists = yield* directoryExists(repoDir);
+        if (!exists) {
+          yield* cloneOrUpdateOneRepoLocally(repoName);
+        }
+
+        if (incoming) {
+          yield* Effect.logInfo(`Fetching latest changes for ${repoName}...`);
+          yield* fetchRepo({ repoDir });
+          const branch = repo.branch ?? "main";
+          return yield* getGitLog({
+            repoDir,
+            limit,
+            range: `HEAD..origin/${branch}`,
+          });
+        } else {
+          return yield* getGitLog({ repoDir, limit });
+        }
+      }),
+
+    /**
+     * Gets the git diff for a repository.
+     */
+    getRepoDiff: (repoName: string, cached: boolean) =>
+      Effect.gen(function* () {
+        yield* Effect.logDebug(`Getting diff for repo: ${repoName}`);
+
+        let repoDir: string;
+        if (repoName === "local") {
+          repoDir = process.cwd();
+        } else {
+          const repo = yield* getRepo({ repoName, config });
+          repoDir = path.join(config.reposDirectory, repo.name);
+
+          const exists = yield* directoryExists(repoDir);
+          if (!exists) {
+            yield* cloneOrUpdateOneRepoLocally(repoName);
+          }
+        }
+
+        return yield* getGitDiff({ repoDir, cached });
       }),
   };
 });
