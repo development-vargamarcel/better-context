@@ -256,6 +256,20 @@ Options:
 
 - `-t, --tech` - The technology/repo to show stats for
 
+### `btca churn`
+
+Identify frequently modified files in the repository (churn).
+
+```bash
+btca churn
+btca churn -t <tech> -n 20
+```
+
+Options:
+
+- `-t, --tech` - The technology/repo to analyze
+- `-n, --limit` - Number of top churned files to show (default: 10)
+
 ### `btca doctor`
 
 Checks the health of your environment, including:

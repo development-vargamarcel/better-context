@@ -11,6 +11,7 @@ import { BookmarkService } from './bookmark.ts';
 import { GeneralError } from '../lib/errors.ts';
 import { selectRepo, promptSelection } from '../lib/ui.ts';
 import { getLanguageBreakdown, getTopContributors, getTotalLines } from '../lib/git-stats.ts';
+import { churnCommand } from '../commands/churn.ts';
 
 declare const __VERSION__: string;
 const VERSION: string = typeof __VERSION__ !== 'undefined' ? __VERSION__ : '0.0.0-dev';
@@ -1472,7 +1473,8 @@ const mainCommand = Command.make('btca', {}, () =>
 		statsCommand,
 		bookmarkCommand,
 		logCommand,
-		diffCommand
+		diffCommand,
+		churnCommand
 	])
 );
 
